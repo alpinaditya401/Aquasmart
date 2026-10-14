@@ -23,6 +23,9 @@ class Config:
     # CSRF: token per-session, dikirim via header X-CSRF-Token
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
+    # Nama cookie session harus "aquasmart_session" — frontend (BFF/server
+    # components) membaca cookie dengan nama ini, sesuai backend PHP lama.
+    SESSION_COOKIE_NAME = "aquasmart_session"
     # Rate limit default; endpoint auth punya batas sendiri
     RATELIMIT_DEFAULT = "240 per minute"
 
