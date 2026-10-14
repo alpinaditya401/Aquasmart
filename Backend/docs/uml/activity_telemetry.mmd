@@ -1,0 +1,14 @@
+%% Activity: Ingest telemetri ESP32 (V3-FR03)
+%% Actor: ESP32 → Flask backend → SQLite
+flowchart TD
+    A([ESP32 kirim telemetri]) --> B{Header X-Device-Key valid?}
+    B -- tidak --> C[401 unauthorized]
+    B -- ya --> D{Body valid?}
+    D -- tidak --> E[422 unprocessable]
+    D -- ya --> F{calibrated=false & ph_sensor=soil_placeholder?}
+    F -- tidak --> E
+    F -- ya --> G{Timestamp duplikat?}
+    G -- payload sama --> H[201 idempoten]
+    G -- payload beda --> I[409 conflict]
+    G -- baru --> J[Simpan device_telemetry + update last_seen]
+    J --> K[201 ternormalisasi]

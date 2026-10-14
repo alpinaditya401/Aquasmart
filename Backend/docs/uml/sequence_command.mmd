@@ -1,0 +1,22 @@
+%% Sequence: command aktuator + ACK (V3-FR07)
+sequenceDiagram
+    participant U as Admin/Dashboard
+    participant API as Flask
+    participant DB as SQLite
+    participant E as ESP32
+    U->>API: POST /api/devices/{id}/control<br/>{actuator, value} + session + CSRF
+    API->>DB: cek aktuator sibuk
+    alt sibuk
+        API-->>U: 409
+    else bebas
+        API->>DB: INSERT actuator_commands (pending)
+        API-->>U: 201 {command}
+    end
+    E->>API: GET /api/device/devices/{id}/commands<br/>X-Device-Key
+    API->>DB: SELECT pending & belum expired
+    API->>DB: UPDATE status=delivered
+    API-->>E: 200 {commands:[...]}
+    E->>E: aktuasi pin GPIO
+    E->>API: POST .../commands/{cid}/ack {status}
+    API->>DB: UPDATE status=succeeded/failed/timeout
+    API-->>E: 200

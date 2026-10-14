@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+instance/
+.pytest_cache/
+venv/
+
+# --- rahasia: jangan pernah commit ---
+.env
+.env.*
+!.env.example
+*.local.txt
+credentials*
+*secret*
+*.pem
+*.key

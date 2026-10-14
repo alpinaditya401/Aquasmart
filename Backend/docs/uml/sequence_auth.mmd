@@ -1,0 +1,19 @@
+%% Sequence: login dashboard (V3-FR01)
+sequenceDiagram
+    participant U as Browser
+    participant BFF as Next.js BFF
+    participant API as Flask
+    participant DB as SQLite
+    U->>BFF: POST /api/auth/login {username, password}
+    BFF->>API: POST /api/auth/login
+    API->>DB: SELECT user by username
+    DB-->>API: user + password_hash
+    API->>API: bcrypt.checkpw()
+    alt cocok
+        API->>API: session[user_id], csrf_token
+        API-->>BFF: 200 {user, csrf_token} + Set-Cookie
+        BFF-->>U: 200 + cookie
+    else salah
+        API-->>BFF: 401 {error}
+        BFF-->>U: 401
+    end

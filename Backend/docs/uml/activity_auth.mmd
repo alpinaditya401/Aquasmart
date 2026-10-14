@@ -1,0 +1,15 @@
+%% Activity: Autentikasi user dashboard (V3-FR01)
+%% Actor: Admin/Viewer → Flask backend → SQLite
+flowchart TD
+    A([User membuka /login]) --> B[Isi username + password]
+    B --> C{POST /api/auth/login}
+    C --> D{Rate limit 30/mnt}
+    D -- lebih --> E[429 rate_limited]
+    D -- ok --> F{User ada & bcrypt cocok?}
+    F -- tidak --> G[401 unauthorized]
+    F -- ya --> H[Buat session + CSRF token]
+    H --> I([Dashboard terbuka])
+    I --> J{Mutasi data}
+    J --> K[Header X-CSRF-Token == session?]
+    K -- tidak --> L[403 csrf_mismatch]
+    K -- ya --> M([Aksi dijalankan])

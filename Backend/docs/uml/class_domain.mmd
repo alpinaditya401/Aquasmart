@@ -1,0 +1,83 @@
+%% Class diagram: domain AquaSmart (SKPL V4.0)
+classDiagram
+    class User {
+        +int id
+        +str username
+        +str password_hash
+        +str role
+        +safe_dict()
+    }
+    class Device {
+        +str id
+        +int user_id
+        +str name
+        +str location
+        +bool online
+        +bool auto_mode
+        +str last_seen
+    }
+    class DeviceCredential {
+        +str device_id
+        +str key_hash
+    }
+    class DeviceTelemetry {
+        +int id
+        +str created_at
+        +str provenance
+        +str source
+        +str payload
+    }
+    class SensorReading {
+        +int id
+        +float ph
+        +float temperature
+        +float turbidity
+        +bool simulation
+    }
+    class ActuatorCommand {
+        +str id
+        +str actuator
+        +bool value
+        +str status
+        +str request_id
+        +to_dict()
+    }
+    class FeedingSchedule {
+        +int id
+        +str time
+        +int duration
+        +str days
+        +bool active
+    }
+    class Alert {
+        +int id
+        +str severity
+        +bool acknowledged
+        +int acknowledged_by
+    }
+    class ThresholdSetting {
+        +int user_id
+        +float ph_min
+        +float ph_max
+        +float turbidity_max
+    }
+    class RuleVersion {
+        +int id
+        +str version
+        +str config_json
+    }
+    class GrowthObservation {
+        +int id
+        +str observed_at
+        +float weight_g
+    }
+    User "1" --> "*" Device : memiliki
+    Device "1" --> "1" DeviceCredential : diautentikasi
+    Device "1" --> "*" DeviceTelemetry : mengirim
+    Device "1" --> "*" SensorReading : memiliki
+    Device "1" --> "*" ActuatorCommand : menerima
+    Device "1" --> "*" FeedingSchedule : dijadwalkan
+    Device "1" --> "*" Alert : memicu
+    Device "1" --> "*" GrowthObservation : diamati
+    User "1" --> "1" ThresholdSetting : mengatur
+    User "1" --> "*" RuleVersion : snapshot

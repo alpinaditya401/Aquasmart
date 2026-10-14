@@ -1,0 +1,19 @@
+%% Activity: Kontrol aktuator + ACK (V3-FR07)
+%% Actor: Admin → Flask → ESP32 → Flask
+flowchart TD
+    A([Admin tekan tombol aktuator]) --> B{Session admin + CSRF?}
+    B -- tidak --> C[403]
+    B -- ya --> D{simulation=true?}
+    D -- ya --> E[422 ditolak]
+    D -- tidak --> F{Aktuator sibuk?}
+    F -- ya --> G[409 conflict]
+    F -- tidak --> H[Enqueue pending, 201]
+    H --> I([ESP32 poll commands])
+    I --> J{Pending & belum expired?}
+    J -- tidak --> K[Antrean kosong]
+    J -- ya --> L[Status → delivered]
+    L --> M([ESP32 aktuasi pin])
+    M --> N[POST ack: succeeded/failed/timeout]
+    N --> O{Status delivered?}
+    O -- tidak --> P[409 terminal]
+    O -- ya --> Q[Status → terminal, 200]

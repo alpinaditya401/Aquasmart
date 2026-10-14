@@ -1,0 +1,24 @@
+%% Sequence: ingest telemetri (V3-FR03)
+sequenceDiagram
+    participant E as ESP32
+    participant API as Flask
+    participant DB as SQLite
+    E->>API: POST /api/devices/{id}/telemetry<br/>X-Device-Key: ***
+    API->>API: SHA-256(key) == device_credentials?
+    alt key salah
+        API-->>E: 401
+    else key cocok
+        API->>API: validasi kontrak<br/>(calibrated=false, ph_sensor=soil_placeholder)
+        alt invalid
+            API-->>E: 422
+        else valid
+            API->>DB: INSERT device_telemetry
+            alt timestamp duplikat
+                DB-->>API: UNIQUE violation
+                API-->>E: 409 (atau 201 bila payload identik)
+            else baru
+                API->>DB: UPDATE devices.last_seen
+                API-->>E: 201 {ok, source}
+            end
+        end
+    end
