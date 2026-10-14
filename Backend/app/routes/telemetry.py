@@ -8,8 +8,9 @@ Kontrak body (dari TelemetryRepository::ingest PHP, diverifikasi kode):
 - turbidity_adc/turbidity_mv (+turbidity_mapping_percent 0–100)
 - soil_ph_adc/soil_ph_mv, tds_adc/tds_mv
 - water_distance_cm + tank_height_cm (0–500, wajib berpasangan)
-- calibrated HARUS false; ph_sensor HARUS 'soil_placeholder'
-  (kontrak ini HANYA menerima sensor belum terkalibrasi)
+- calibrated: boolean (false = belum kalibrasi, true = sudah kalibrasi;
+  direvisi 2026-10-14: menerima true agar data terkalibrasi bisa masuk;
+  payload mentah tersimpan untuk audit); ph_sensor HARUS 'soil_placeholder'
 
 Respons: 201 ternormalisasi; 409 timestamp duplikat beda nilai;
 422 validasi; 401 key salah. Firmware menganggap 201/409/422 terminal.
@@ -51,8 +52,9 @@ def _validate(body):
     """Return (cleaned_dict | None, error_message | None)."""
     if not isinstance(body, dict):
         return None, "Body harus JSON object."
-    if body.get("calibrated") is not False:
-        return None, "Kontrak ini hanya menerima sensor belum terkalibrasi (calibrated=false)."
+    calibrated = body.get("calibrated")
+    if not isinstance(calibrated, bool):
+        return None, "calibrated harus boolean."
     if body.get("ph_sensor") != "soil_placeholder":
         return None, "ph_sensor harus 'soil_placeholder'."
     created = _parse_created_at(body.get("created_at"))

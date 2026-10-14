@@ -117,8 +117,15 @@ def test_telemetry_401_key_salah(client):
     assert r.status_code == 401
 
 
-def test_telemetry_422_calibrated(client):
+def test_telemetry_201_calibrated_true_diterima(client):
+    # Revisi FR-013 (2026-10-14): calibrated=true diterima agar data
+    # terkalibrasi bisa masuk; payload mentah tersimpan untuk audit.
     r = _post_tl(client, _telemetry_body(calibrated=True))
+    assert r.status_code == 201, r.json
+
+
+def test_telemetry_422_calibrated_bukan_boolean(client):
+    r = _post_tl(client, _telemetry_body(calibrated="ya"))
     assert r.status_code == 422
 
 
