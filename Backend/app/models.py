@@ -27,6 +27,9 @@ class User(db.Model):
             "name": self.name,
             "role": self.role,
             "phone": self.phone,
+            # Workspace out-of-scope (Won't); frontend mewajibkan field ini
+            # (nullable) sesuai kontrak backend PHP lama.
+            "workspace_owner_id": None,
         }
 
 
