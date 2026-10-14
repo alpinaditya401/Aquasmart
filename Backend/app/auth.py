@@ -76,6 +76,8 @@ def csrf_required(fn):
 
 
 def new_csrf_token():
-    token = secrets.token_hex(32)
+    # 48 hex chars (24 bytes) — cocok dengan kontrak frontend (/^[0-9a-f]{48}$/)
+    # dan perilaku backend PHP lama.
+    token = secrets.token_hex(24)
     session["csrf_token"] = token
     return token
