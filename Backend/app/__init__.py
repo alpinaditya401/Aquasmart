@@ -37,7 +37,7 @@ def create_app(config_name="default"):
     db.init_app(app)
     limiter.init_app(app)
 
-    from app.routes import public, auth, telemetry, readings, commands, reports, devices, settings, alerts, control, profile, device_mgmt, schedules, feeding, observations, export
+    from app.routes import public, auth, telemetry, readings, commands, reports, devices, settings, alerts, control, profile, device_mgmt, schedules, feeding, observations, export, workspace
     app.register_blueprint(public.bp)
     app.register_blueprint(auth.bp)
     app.register_blueprint(telemetry.bp)
@@ -54,6 +54,7 @@ def create_app(config_name="default"):
     app.register_blueprint(feeding.bp)
     app.register_blueprint(observations.bp)
     app.register_blueprint(export.bp)
+    app.register_blueprint(workspace.bp)
 
     @app.errorhandler(404)
     def _404(e):

@@ -382,3 +382,15 @@ def test_control_aktuator_sibuk_409_lalu_bisa_lagi_setelah_terminal(client):
     # aktuator bebas lagi
     r3 = _post_control(client, b2, csrf_token=csrf)
     assert r3.status_code == 201, r3.json
+
+
+def test_workspace_dan_audit_logs(client):
+    _login(client)
+    r = client.get("/api/workspace")
+    assert r.status_code == 200
+    data = r.json
+    assert data["owner_id"] == 1
+    assert data["members"] == [{"id": 1, "name": "Admin", "role": "admin"}]
+    r = client.get("/api/audit-logs?limit=20")
+    assert r.status_code == 200
+    assert r.json == {"audit_logs": []}
