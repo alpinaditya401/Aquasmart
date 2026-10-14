@@ -82,4 +82,7 @@ def logout():
 @bp.get("/api/auth/me")
 @login_required
 def me():
-    return jsonify({"user": g.user.safe_dict()}), 200
+    # Frontend memvalidasi /me dengan skema Session (butuh csrf_token),
+    # sesuai perilaku backend PHP lama.
+    return jsonify({"user": g.user.safe_dict(),
+                    "csrf_token": session.get("csrf_token")}), 200
