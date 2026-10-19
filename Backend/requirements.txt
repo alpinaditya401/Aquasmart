@@ -5,4 +5,5 @@ bcrypt==5.0.0
 gunicorn==26.2.0
 apscheduler==3.11.3
 pytest==9.1.1
+redis==8.1.0  # opsional: storage rate limit bila REDIS_URL di-set (docker-compose)
 psycopg2-binary==2.9.10  # opsional: aktif bila DATABASE_URL postgres (Railway Postgres plugin)
