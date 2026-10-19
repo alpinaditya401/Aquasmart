@@ -44,7 +44,9 @@ aquasmart-backend/
 │       ├── settings.py    # GET /api/settings/thresholds
 │       └── alerts.py      # GET /api/alerts
 │       └── control.py     # POST /api/devices/<id>/control (FR-018)
-├── tests/test_api.py      # 15 test kontrak (pytest)
+├── tests/                 # 72 test pytest (dihitung 19 Okt 2026)
+├── docs/API.md            # dokumentasi seluruh endpoint
+├── Dockerfile, .dockerignore, docker-compose.yml
 ├── instance/aquasmart.sqlite  # salinan demo.sqlite (dev)
 ├── config.py, wsgi.py, requirements.txt
 └── FR-PRIORITY-TIMELINE.md
@@ -56,8 +58,28 @@ aquasmart-backend/
 export SECRET_KEY="ganti-dengan-yang-kuat"
 python wsgi.py            # dev → http://127.0.0.1:8080
 gunicorn wsgi:app         # production (Railway)
-pytest tests/ -q          # 15 test
+pytest tests/ -q          # 72 passed pada 19 Okt 2026
 ```
+
+### Docker (backend + Postgres + Redis)
+
+```bash
+cp .env.example .env      # isi SECRET_KEY dan POSTGRES_PASSWORD
+docker compose up --build
+curl http://localhost:8080/healthz
+```
+
+Image memakai multi-stage build di atas `python:3.12-slim` dan berjalan sebagai
+`appuser` (uid 10001), bukan root. Data Postgres disimpan di volume `pgdata`,
+sehingga tetap ada saat container dibuat ulang. Postgres dan Redis tidak membuka
+port ke host. Redis menjadi penyimpanan rate limit bersama untuk dua worker
+gunicorn. Hasil uji 19 Oktober 2026 (Docker 29.8.1):
+- Container sehat, dan 12 tabel terbentuk di Postgres.
+- Register, me, dan PUT threshold dengan CSRF lulus; PUT tanpa CSRF ditolak 403.
+- Login berhasil setelah container `backend` dan `db` dibuat ulang.
+- Login ke-31 dalam satu menit ditolak 429.
+
+Dokumentasi endpoint ada di [docs/API.md](docs/API.md).
 
 ## 4. Koneksi backend → frontend
 
