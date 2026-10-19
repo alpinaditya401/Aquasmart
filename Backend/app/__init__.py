@@ -34,6 +34,12 @@ def create_app(config_name="default"):
     app = Flask(__name__)
     app.config.from_object(config_by_name[config_name])
 
+    # instance/ is gitignored, so a fresh clone or container has no folder for
+    # the default SQLite file and sqlite3 refuses to create it.
+    uri = app.config["SQLALCHEMY_DATABASE_URI"]
+    if uri.startswith("sqlite:///") and uri != "sqlite:///:memory:":
+        os.makedirs(os.path.dirname(uri[len("sqlite:///"):]), exist_ok=True)
+
     db.init_app(app)
     limiter.init_app(app)
 

@@ -78,6 +78,18 @@ def test_rate_limit_fallback_memory():
     assert lim._storage_uri == "memory://"
 
 
+def test_sqlite_folder_dibuat_bila_belum_ada(tmp_path):
+    from config import Config
+    path = tmp_path / "instance" / "aquasmart.sqlite"
+    with mock.patch.object(Config, "SQLALCHEMY_DATABASE_URI",
+                           "sqlite:///" + str(path)):
+        app = create_app("default")
+    with app.app_context():
+        db.create_all()
+        db.engine.dispose()
+    assert path.exists()
+
+
 def test_healthz():
     from app import create_app
     app = create_app("testing")

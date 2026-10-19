@@ -162,8 +162,6 @@ def _seed_command(app):
 
 
 def test_poll_dan_ack(client):
-    from wsgi import app as _  # noqa
-    # pakai app context dari fixture via client.application
     _seed_command(client.application)
     r = client.get(f"/api/device/devices/{DEVICE_ID}/commands",
                    headers={"X-Device-Key": RAW_KEY})
