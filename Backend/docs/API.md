@@ -107,6 +107,7 @@ hanya menjawab origin yang tercantum di `CORS_ORIGINS` (dipisah koma), dengan
 | GET | `/api/workspace` | Sesi | Workspace (model satu pengguna) |
 | GET | `/api/audit-logs` | Sesi | Audit log (belum diimplementasikan, selalu kosong) |
 | POST | `/api/devices/{id}/telemetry` | Device | Kirim telemetri dari ESP32 |
+| POST | `/api/devices/{id}/readings` | Device | Kirim bacaan pH, suhu, kekeruhan dan evaluasi alert |
 | POST | `/api/devices/{id}/heartbeat` | Device | Tanda perangkat hidup |
 | GET | `/api/devices/{id}/telemetry/raw` | Device | Telemetri mentah berhalaman |
 | GET | `/api/device/devices/{id}/commands` | Device | ESP32 mengambil perintah |
@@ -233,11 +234,12 @@ fisik bergerak. Bukti aktuasi hanya dari ack perangkat.
 ## Data sensor dan laporan
 
 ### `GET /api/devices/{id}/readings?limit=50`
+Hanya untuk pemilik perangkat. Perangkat milik akun lain dijawab `404`.
 `limit` 1-100. Urut dari yang paling lama.
 `200` `{"readings": [{time, ph, temperature, turbidity, simulation, provenance, source_session}]}`.
 
 ### `GET /api/reports?device_id=&period=day|week|month&date=YYYY-MM-DD`
-Agregasi harian UTC. Minggu dimulai Senin. Periode tanpa data mengembalikan
+Hanya untuk pemilik perangkat (`404` bila bukan). Agregasi harian UTC. Minggu dimulai Senin. Periode tanpa data mengembalikan
 `groups` kosong (tidak diisi angka karangan).
 ```json
 {"device_id": "AQS-001", "period": "week", "date": "2026-10-19", "timezone": "UTC",
@@ -257,7 +259,9 @@ yang diawali `= + - @` diberi awalan `'` untuk mencegah formula injection.
 ## Alert
 
 ### `GET /api/alerts?limit=20`
-`limit` 1-100. Urut terbaru dulu.
+Hanya alert dari perangkat milik pengguna. `limit` 1-100. Urut terbaru dulu.
+`unacknowledged_count` menghitung semua alert pengguna yang belum dibaca, bukan
+hanya yang ada di halaman ini.
 `200` `{"alerts": [{id, device_id, severity, message, acknowledged, created_at, acknowledged_at, provenance, source_session}], "unacknowledged_count": 3}`.
 
 ### `POST /api/alerts/{id}/acknowledge` (CSRF)
@@ -374,6 +378,35 @@ Body maksimal 64 KiB. Seluruh body disimpan mentah untuk audit.
 Kiriman ulang dengan `created_at` dan isi identik: `201` dengan `"duplicate": true`.
 `created_at` sama tetapi isi berbeda: `409`. `422` validasi, `404` perangkat tidak dikenal.
 
+Telemetri ini disimpan mentah dan tidak diubah menjadi bacaan. Sensor pH yang
+terpasang adalah placeholder tanah, jadi nilai pH air tidak bisa diturunkan dari
+payload ini. Bacaan untuk grafik, laporan, dan alert dikirim lewat
+`POST /api/devices/{id}/readings`.
+
+### `POST /api/devices/{id}/readings`
+Body:
+
+| Field | Aturan |
+| --- | --- |
+| `ph` | angka 0-14 |
+| `temperature` | angka -50 sampai 100 (derajat Celsius) |
+| `turbidity` | angka >= 0 |
+| `simulation` | boolean, bawaan `false` |
+| `created_at` | opsional, ISO-8601 dengan zona waktu. Bawaan: waktu server |
+
+`201` `{"reading": {time, ph, temperature, turbidity, simulation, provenance, source_session}}`.
+`provenance` bernilai `device` atau `simulation` sesuai `simulation`.
+Kiriman ulang dengan `created_at` dan nilai identik: `201` dengan bacaan lama.
+Nilai berbeda: `409`. `422` validasi, `404` perangkat tidak dikenal.
+
+Setelah disimpan, bacaan dinilai terhadap threshold pemilik perangkat (atau nilai
+bawaan `/api/rules` bila pemilik belum menyimpan threshold). Untuk tiap parameter
+(pH, suhu, kekeruhan), alert `warning` dibuat hanya saat nilai **baru** keluar
+ambang. Bacaan sebelumnya dengan provenance yang sama harus masih normal, sehingga
+pelanggaran yang berlanjut tidak membuat alert berulang. Bacaan yang `created_at`-nya
+lebih lama dari bacaan terakhir tetap disimpan, tetapi tidak dinilai. Port dari
+`DeviceRepository::ingestReading` backend PHP.
+
 ### `POST /api/devices/{id}/heartbeat`
 `204` tanpa body. Memperbarui `last_seen` dan menandai perangkat online.
 
@@ -399,18 +432,21 @@ Command `pending` yang lewat batas diubah jadi `expired` oleh
 
 ## Kondisi yang perlu diketahui
 
-Temuan pemeriksaan kode 19 Oktober 2026. Belum diperbaiki di cabang ini.
+Temuan pemeriksaan kode 19 Oktober 2026.
 
-1. **Telemetri belum diolah jadi bacaan dan alert.** `POST .../telemetry` hanya mengisi
-   tabel `device_telemetry`. Tidak ada kode yang menulis `sensor_readings` atau
-   `alerts`, sehingga `readings`, `reports`, `export.csv`, `alerts`, dan
-   `latest_reading` hanya menampilkan data lama hasil impor, bukan data perangkat baru.
-2. **Tiga endpoint belum membatasi data per pemilik.** `GET /api/alerts` mengembalikan
-   alert semua pengguna. `GET /api/devices/{id}/readings` dan `GET /api/reports`
-   tidak memeriksa apakah perangkat milik pengguna yang login.
-3. **Semua akun baru ber-role `admin`.** Belum ada role viewer.
-4. **Audit log** belum diimplementasikan (lihat di atas).
-5. **Ekspor CSV** memakai batas `< {to}T23:59:59Z`, jadi detik terakhir hari `to`
+Sudah diperbaiki di cabang ini:
+- Pengecekan pemilik data ditambahkan di `GET /api/alerts`,
+  `GET /api/devices/{id}/readings`, dan `GET /api/reports`.
+- `POST /api/devices/{id}/readings` sekarang mengisi `sensor_readings` dan membuat alert.
+
+Belum ditangani:
+1. **Firmware belum mengirim ke `/readings`.** Sketsa ESP32 saat ini hanya mengirim
+   `/telemetry`. Sampai firmware memanggil `/readings` dengan pH air terkalibrasi,
+   grafik, laporan, dan alert hanya berisi data yang dikirim lewat endpoint itu
+   secara manual atau oleh simulator.
+2. **Semua akun baru ber-role `admin`.** Belum ada role viewer.
+3. **Audit log** belum diimplementasikan (lihat di atas).
+4. **Ekspor CSV** memakai batas `< {to}T23:59:59Z`, jadi detik terakhir hari `to`
    tidak ikut.
-6. **Kontrol aktuator belum terbukti di perangkat fisik.** API hanya mencatat
+5. **Kontrol aktuator belum terbukti di perangkat fisik.** API hanya mencatat
    antrian dan ack.

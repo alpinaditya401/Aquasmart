@@ -44,7 +44,7 @@ aquasmart-backend/
 │       ├── settings.py    # GET /api/settings/thresholds
 │       └── alerts.py      # GET /api/alerts
 │       └── control.py     # POST /api/devices/<id>/control (FR-018)
-├── tests/                 # 72 test pytest (dihitung 19 Okt 2026)
+├── tests/                 # 89 test pytest (dihitung 19 Okt 2026)
 ├── docs/API.md            # dokumentasi seluruh endpoint
 ├── Dockerfile, .dockerignore, docker-compose.yml
 ├── instance/aquasmart.sqlite  # salinan demo.sqlite (dev)
@@ -58,7 +58,7 @@ aquasmart-backend/
 export SECRET_KEY="ganti-dengan-yang-kuat"
 python wsgi.py            # dev → http://127.0.0.1:8080
 gunicorn wsgi:app         # production (Railway)
-pytest tests/ -q          # 72 passed pada 19 Okt 2026
+pytest tests/ -q          # 89 passed pada 19 Okt 2026
 ```
 
 ### Docker (backend + Postgres + Redis)
