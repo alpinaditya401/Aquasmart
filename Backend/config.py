@@ -9,16 +9,20 @@ import os
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 
+def normalize_db_url(url):
+    # Railway gives postgres://, which SQLAlchemy rejects. The driver is named
+    # explicitly because SQLAlchemy 2.1 maps a bare postgresql:// to psycopg 3,
+    # while requirements.txt installs psycopg2.
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg2://" + url[len(prefix):]
+    return url
+
+
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-ganti-di-production")
-    _db_url = os.environ.get(
-        "DATABASE_URL",
-        "sqlite:///" + os.path.join(BASE_DIR, "instance", "aquasmart.sqlite"),
-    )
-    # Railway memberi scheme postgres:// — SQLAlchemy butuh postgresql://
-    if _db_url.startswith("postgres://"):
-        _db_url = "postgresql://" + _db_url[len("postgres://"):]
-    SQLALCHEMY_DATABASE_URI = _db_url
+    SQLALCHEMY_DATABASE_URI = normalize_db_url(os.environ.get("DATABASE_URL") or (
+        "sqlite:///" + os.path.join(BASE_DIR, "instance", "aquasmart.sqlite")))
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     # CSRF: token per-session, dikirim via header X-CSRF-Token
     SESSION_COOKIE_HTTPONLY = True

@@ -90,6 +90,13 @@ def test_sqlite_folder_dibuat_bila_belum_ada(tmp_path):
     assert path.exists()
 
 
+def test_database_url_postgres_memakai_psycopg2():
+    from config import normalize_db_url
+    for url in ("postgres://u:p@db:5432/a", "postgresql://u:p@db:5432/a"):
+        assert normalize_db_url(url) == "postgresql+psycopg2://u:p@db:5432/a"
+    assert normalize_db_url("sqlite:///x.sqlite") == "sqlite:///x.sqlite"
+
+
 def test_healthz():
     from app import create_app
     app = create_app("testing")
