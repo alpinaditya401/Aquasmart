@@ -1,5 +1,5 @@
 """Bacaan ternormalisasi untuk grafik: GET /api/devices/<id>/readings (FR-015)."""
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from app import db, errors
 from app.auth import login_required
@@ -11,7 +11,7 @@ bp = Blueprint("readings", __name__)
 @bp.get("/api/devices/<device_id>/readings")
 @login_required
 def readings(device_id):
-    device = db.session.get(Device, device_id)
+    device = Device.query.filter_by(id=device_id, user_id=g.user.id).first()
     if not device:
         return errors.not_found("Device tidak dikenal.")
     try:

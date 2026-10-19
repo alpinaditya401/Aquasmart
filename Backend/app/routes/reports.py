@@ -6,9 +6,9 @@ Bucket harian UTC dari sensor_readings. Periode kosong → groups kosong
 """
 from datetime import datetime, timedelta
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
-from app import db, errors
+from app import errors
 from app.auth import login_required
 from app.models import Device, SensorReading
 
@@ -27,7 +27,7 @@ def reports():
         day = datetime.strptime(date_s, "%Y-%m-%d")
     except ValueError:
         return errors.unprocessable("date harus format YYYY-MM-DD.")
-    device = db.session.get(Device, device_id)
+    device = Device.query.filter_by(id=device_id, user_id=g.user.id).first()
     if not device:
         return errors.not_found("Device tidak dikenal.")
 

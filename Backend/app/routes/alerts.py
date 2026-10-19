@@ -21,9 +21,9 @@ def list_alerts():
         limit = max(1, min(100, int(request.args.get("limit", 20))))
     except ValueError:
         return errors.unprocessable("limit harus 1–100.")
-    rows = (Alert.query
-            .order_by(Alert.created_at.desc())
-            .limit(limit).all())
+    own = (Alert.query.join(Device, Alert.device_id == Device.id)
+           .filter(Device.user_id == g.user.id))
+    rows = own.order_by(Alert.created_at.desc()).limit(limit).all()
     alerts = [{
         "id": a.id,
         "device_id": a.device_id,
@@ -35,7 +35,7 @@ def list_alerts():
         "provenance": a.provenance,
         "source_session": a.source_session,
     } for a in rows]
-    unack = sum(1 for a in rows if not a.acknowledged)
+    unack = own.filter(Alert.acknowledged == 0).count()
     return jsonify({"alerts": alerts, "unacknowledged_count": unack}), 200
 
 
