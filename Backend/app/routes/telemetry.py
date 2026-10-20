@@ -3,7 +3,8 @@
 Kontrak body (dari TelemetryRepository::ingest PHP, diverifikasi kode):
 - created_at: UTC ketat (ISO-8601, akhiran Z)
 - simulation: bool; provenance: 'simulation'|'device' (harus cocok)
-- source_session: 8–64 karakter alnum
+- source_session: 8–64 karakter huruf, angka, _ atau - (firmware mengirim
+  "esp32-<efuse>-<acak>")
 - temperature + temperature_status (ok|disconnected|unverified)
 - turbidity_adc/turbidity_mv (+turbidity_mapping_percent 0–100)
 - soil_ph_adc/soil_ph_mv, tds_adc/tds_mv
@@ -28,7 +29,9 @@ from app.models import Device, DeviceTelemetry
 
 bp = Blueprint("telemetry", __name__)
 
-_ALNUM = re.compile(r"^[A-Za-z0-9]{8,64}$")
+# Same pattern as the PHP backend; fullmatch because "$" in re.match would
+# still accept a trailing newline.
+_SESSION = re.compile(r"[A-Za-z0-9_-]{8,64}")
 _TEMP_STATUS = ("ok", "disconnected", "unverified")
 
 
@@ -69,8 +72,8 @@ def _validate(body):
     if (provenance == "simulation") != simulation:
         return None, "provenance harus cocok dengan simulation."
     source_session = body.get("source_session") or ""
-    if not _ALNUM.match(source_session):
-        return None, "source_session harus 8–64 karakter alfanumerik."
+    if not isinstance(source_session, str) or not _SESSION.fullmatch(source_session):
+        return None, "source_session harus 8–64 karakter huruf, angka, _ atau -."
     tstat = body.get("temperature_status")
     if tstat not in _TEMP_STATUS:
         return None, "temperature_status harus ok|disconnected|unverified."
