@@ -22,6 +22,17 @@ def _source(reading):
     return reading.provenance if reading.provenance in SOURCES else "legacy_unverified"
 
 
+def window(period, day):
+    """UTC [start, end) of the day, the Monday-based week, or the month."""
+    if period == "day":
+        return day, day + timedelta(days=1)
+    if period == "week":
+        start = day - timedelta(days=day.weekday())
+        return start, start + timedelta(days=7)
+    start = day.replace(day=1)
+    return start, (start + timedelta(days=32)).replace(day=1)
+
+
 @bp.get("/api/reports")
 @login_required
 def reports():
@@ -37,16 +48,11 @@ def reports():
     device = Device.query.filter_by(id=device_id, user_id=g.user.id).first()
     if not device:
         return errors.not_found("Device tidak dikenal.")
+    start, end = window(period, day)
+    return jsonify(build_report(device_id, period, date_s, start, end)), 200
 
-    if period == "day":
-        start, end = day, day + timedelta(days=1)
-    elif period == "week":
-        start = day - timedelta(days=day.weekday())
-        end = start + timedelta(days=7)
-    else:
-        start = day.replace(day=1)
-        end = (start + timedelta(days=32)).replace(day=1)
 
+def build_report(device_id, period, date_s, start, end):
     rows = (SensorReading.query
             .filter(SensorReading.device_id == device_id,
                     SensorReading.created_at >= start.strftime("%Y-%m-%d"),
@@ -87,7 +93,7 @@ def reports():
         source_counts[_source(r)] += 1
     simulation_samples = sum(1 for r in rows if r.simulation)
 
-    return jsonify({
+    return {
         "device_id": device_id,
         "period": period,
         "date": date_s,
@@ -99,4 +105,4 @@ def reports():
         "source_counts": source_counts,
         "simulation_samples": simulation_samples,
         "non_simulation_samples": len(rows) - simulation_samples,
-    }), 200
+    }

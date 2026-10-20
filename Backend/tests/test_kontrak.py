@@ -446,3 +446,100 @@ def test_observasi_pertumbuhan_milik_orang_lain_tidak_bisa_dihapus(client):
     hb = {"X-CSRF-Token": r.json["csrf_token"]}
     assert client.delete(f"/api/growth-observations/{oid}", headers=hb).status_code == 404
     assert client.get("/api/growth-observations").json["observations"] == []
+
+
+# --- frontend: ekspor (tautan unduhan di halaman Laporan) ---
+EXPORT_COMMAND_KEYS = {"id", "device_id", "created_at", "actuator", "value", "duration",
+                       "status", "simulation", "completed_at", "provenance",
+                       "source_session"}
+EXPORT_ROW_KEYS = {
+    "readings": {"id", "device_id", "created_at", "ph", "temperature", "turbidity",
+                 "simulation", "provenance", "source_session"},
+    "alerts": {"id", "device_id", "created_at", "severity", "message", "acknowledged",
+               "acknowledged_at", "provenance", "source_session", "source"},
+    "commands": EXPORT_COMMAND_KEYS,
+    "feeding_logs": EXPORT_COMMAND_KEYS,
+    "reports": {"day", "cnt", "ph_avg", "temperature_avg", "turbidity_avg",
+                "simulation_samples", "non_simulation_samples", "source_simulation",
+                "source_device", "source_manual", "source_seed",
+                "source_legacy_unverified"},
+    "telemetry": TELEMETRY_KEYS,
+}
+
+
+def _export(client, kind, fmt="json", **kw):
+    query = {"device_id": DEVICE, "kind": kind, "period": "day",
+             "date": "2026-10-20", "format": fmt, **kw}
+    return client.get("/api/export", query_string=query)
+
+
+def _seed_export(client, monkeypatch):
+    from datetime import datetime, timezone
+    _post_reading(client, created_at="2026-10-20T02:00:00Z")
+    _post_reading(client, ph=9.3, created_at="2026-10-20T03:00:00Z")
+    _post_telemetry(client, source_session="-cmd12345")
+    # Command timestamps are epoch seconds; pin them inside 2026-10-20 UTC.
+    # Log in afterwards: the session cookie is signed with the current time
+    # and a cookie from the future is rejected.
+    at = int(datetime(2026, 10, 20, 4, tzinfo=timezone.utc).timestamp())
+    monkeypatch.setattr(time, "time", lambda: at)
+    h = _login(client)
+    _control(client, h, actuator="feeder", value=True, duration=2)
+    _poll_and_ack(client, "succeeded")
+
+
+@pytest.mark.parametrize("kind", list(EXPORT_ROW_KEYS))
+def test_export_json_per_jenis(client, monkeypatch, kind):
+    import json
+    _seed_export(client, monkeypatch)
+    r = _export(client, kind)
+    assert r.status_code == 200, r.get_data(as_text=True)
+    meta = r.json["meta"]
+    assert meta["kind"] == kind and meta["device_id"] == DEVICE
+    assert meta["hardware_verified"] is False and meta["timezone"] == "UTC"
+    assert (meta["start_at"], meta["end_at_exclusive"]) == (
+        "2026-10-20T00:00:00Z", "2026-10-21T00:00:00Z")
+    assert set(meta["source_counts"]) == PROVENANCE
+    assert r.json["rows"]
+    for row in r.json["rows"]:
+        assert EXPORT_ROW_KEYS[kind] <= row.keys(), EXPORT_ROW_KEYS[kind] - row.keys()
+    for flag in ("acknowledged", "value"):
+        for row in r.json["rows"]:
+            if flag in row:
+                assert row[flag] in (0, 1) and not isinstance(row[flag], bool)
+    assert r.headers["X-Export-Rows"] == str(len(r.json["rows"]))
+    assert json.loads(r.headers["X-Provenance-Counts"]) == meta["source_counts"]
+
+
+def test_export_csv_seperti_php(client, monkeypatch):
+    _seed_export(client, monkeypatch)
+    r = _export(client, "readings", "csv")
+    assert r.status_code == 200
+    assert r.headers["Content-Type"].startswith("text/csv")
+    assert r.headers["Content-Disposition"] == 'attachment; filename="aquasmart-export.csv"'
+    lines = r.get_data(as_text=True).splitlines()
+    assert lines[0] == ("id,device_id,created_at,ph,temperature,turbidity,simulation,"
+                        "provenance,source_session,source_simulation,source_device,"
+                        "source_manual,source_seed,source_legacy_unverified")
+    assert len(lines) == 3 and ",false,device,," in lines[1]
+
+
+def test_export_csv_menetralkan_formula(client, monkeypatch):
+    _seed_export(client, monkeypatch)
+    body = _export(client, "telemetry", "csv").get_data(as_text=True)
+    assert ",'-cmd12345," in body and ",-cmd12345," not in body
+
+
+@pytest.mark.parametrize("change,status", [
+    ({"kind": "semua"}, 422), ({"format": "xlsx"}, 422), ({"date": "2026-02-30"}, 422),
+    ({"period": "tahun"}, 422), ({"device_id": "AQS-LAIN"}, 404)])
+def test_export_filter_ditolak(client, change, status):
+    _login(client)
+    r = client.get("/api/export", query_string={
+        "device_id": DEVICE, "kind": "readings", "period": "day",
+        "date": "2026-10-20", "format": "json", **change})
+    assert r.status_code == status
+
+
+def test_export_butuh_login(client):
+    assert _export(client, "readings").status_code == 401
