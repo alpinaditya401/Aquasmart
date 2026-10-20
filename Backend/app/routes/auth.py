@@ -76,7 +76,7 @@ def login():
 @login_required
 def logout():
     session.clear()
-    return jsonify({"ok": True}), 200
+    return jsonify({"logged_out": True}), 200
 
 
 @bp.get("/api/auth/me")

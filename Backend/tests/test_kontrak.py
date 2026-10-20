@@ -301,3 +301,11 @@ def test_status_aerator_ikut_ack_firmware(client, status, aerator):
     assert client.get("/api/devices").json["devices"][0]["aerator"] is False
     _poll_and_ack(client, status)
     assert client.get("/api/devices").json["devices"][0]["aerator"] is aerator
+
+
+# --- frontend: auth ---
+def test_logout_membalas_logged_out(client):
+    _login(client)
+    r = client.post("/api/auth/logout")
+    assert r.status_code == 200 and r.json == {"logged_out": True}
+    assert client.get("/api/auth/me").status_code == 401
