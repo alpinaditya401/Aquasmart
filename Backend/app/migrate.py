@@ -40,3 +40,12 @@ def ensure_columns(db):
                 if n:
                     log.warning("migrasi: %d baris device_telemetry "
                                 "di-backfill source='simulated'", n)
+        # Commands from the dashboard used to be stored as 'dashboard', which
+        # is outside the provenance set the frontend accepts.
+        if "actuator_commands" in existing_tables:
+            n = conn.execute(text(
+                "UPDATE actuator_commands SET provenance='manual' "
+                "WHERE provenance='dashboard'")).rowcount
+            if n:
+                log.warning("migrasi: %d command provenance 'dashboard' "
+                            "diganti 'manual'", n)

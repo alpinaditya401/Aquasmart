@@ -122,16 +122,24 @@ class ActuatorCommand(db.Model):
     TERMINAL = ("succeeded", "failed", "timeout")
 
     def to_dict(self):
+        # The firmware ignores a command whose simulation is not the boolean
+        # false, and the frontend Command schema needs every field below.
         return {
             "id": self.id,
             "device_id": self.device_id,
+            "user_id": self.user_id,
             "actuator": self.actuator,
             "value": bool(self.value),
             "duration": self.duration,
             "request_id": self.request_id,
             "status": self.status,
+            "simulation": bool(self.simulation),
             "created_at": self.created_at,
             "expires_at": self.expires_at,
+            "delivered_at": self.delivered_at,
+            "completed_at": self.completed_at,
+            "provenance": self.provenance,
+            "source_session": self.source_session,
         }
 
 

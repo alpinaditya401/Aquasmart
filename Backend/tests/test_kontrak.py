@@ -193,3 +193,47 @@ def test_telemetri_get_limit(client):
         "2026-10-20T02:02:00Z", "2026-10-20T02:01:00Z"]
     assert client.get(f"/api/devices/{DEVICE}/telemetry?limit=0").status_code == 422
     assert client.get(f"/api/devices/{DEVICE}/telemetry?limit=101").status_code == 422
+
+
+# --- firmware dan frontend: command ---
+COMMAND_KEYS = {"id", "device_id", "user_id", "actuator", "value", "duration",
+                "request_id", "status", "simulation", "created_at", "expires_at",
+                "delivered_at", "completed_at", "provenance", "source_session"}
+COMMAND_STATUS = {"pending", "delivered", "succeeded", "failed", "timeout"}
+
+
+def _assert_command(cmd):
+    assert COMMAND_KEYS <= cmd.keys(), COMMAND_KEYS - cmd.keys()
+    assert re.fullmatch(r"[0-9a-f]{32}", cmd["id"])
+    assert cmd["provenance"] in PROVENANCE and cmd["status"] in COMMAND_STATUS
+    assert isinstance(cmd["created_at"], int) and isinstance(cmd["expires_at"], int)
+
+
+def test_poll_command_bisa_diterima_firmware(client):
+    h = _login(client)
+    r = client.post(f"/api/devices/{DEVICE}/control",
+                    json={"actuator": "aerator", "value": True}, headers=h)
+    assert r.status_code == 201, r.json
+    poll = client.get(f"/api/device/devices/{DEVICE}/commands",
+                      headers={"X-Device-Key": KEY})
+    cmd = poll.json["commands"][0]
+    # acceptCommand() in aqs_actuators.h drops a command unless simulation is
+    # the boolean false, so without the field nothing is executed or ACKed.
+    assert cmd["simulation"] is False
+    assert isinstance(cmd["value"], bool) and isinstance(cmd["duration"], int)
+    _assert_command(cmd)
+    assert cmd["provenance"] == "manual" and cmd["user_id"] == 1
+    assert isinstance(cmd["delivered_at"], int) and cmd["completed_at"] is None
+
+
+def test_migrasi_provenance_dashboard_jadi_manual(client):
+    from app.migrate import ensure_columns
+    from app.models import ActuatorCommand
+    with client.application.app_context():
+        db.session.add(ActuatorCommand(
+            id="a" * 32, device_id=DEVICE, user_id=1, actuator="aerator",
+            value=1, duration=0, request_id="lama", status="succeeded",
+            simulation=0, created_at=1, expires_at=2, provenance="dashboard"))
+        db.session.commit()
+        ensure_columns(db)
+        assert db.session.get(ActuatorCommand, "a" * 32).provenance == "manual"

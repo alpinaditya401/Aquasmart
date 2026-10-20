@@ -1,8 +1,9 @@
 """Job terjadwal: expire_pending_commands.
 
 Command berstatus 'pending' yang lebih tua dari COMMAND_EXPIRY_MINUTES
-(default 10) diubah menjadi 'expired' agar tidak menumpuk di antrian
-dan tidak bisa di-poll selamanya oleh firmware.
+(default 10) diubah menjadi 'timeout' (status terminal di SRS, backend PHP,
+dan skema frontend) agar tidak menumpuk di antrian dan tidak bisa di-poll
+selamanya oleh firmware.
 
 Dijalankan via:
 - Flask CLI:  flask expire-commands
@@ -17,7 +18,7 @@ log = logging.getLogger(__name__)
 
 
 def expire_pending_commands():
-    """Return jumlah command yang diubah menjadi 'expired'."""
+    """Return jumlah command yang diubah menjadi 'timeout'."""
     from app import db
     from app.models import ActuatorCommand
 
@@ -25,11 +26,13 @@ def expire_pending_commands():
         minutes = int(os.environ.get("COMMAND_EXPIRY_MINUTES", "10"))
     except ValueError:
         minutes = 10
-    cutoff = int(time.time()) - minutes * 60
+    now = int(time.time())
+    cutoff = now - minutes * 60
     updated = (ActuatorCommand.query
                .filter(ActuatorCommand.status == "pending",
                        ActuatorCommand.created_at < cutoff)
-               .update({ActuatorCommand.status: "expired"},
+               .update({ActuatorCommand.status: "timeout",
+                        ActuatorCommand.completed_at: now},
                        synchronize_session=False))
     db.session.commit()
     return updated

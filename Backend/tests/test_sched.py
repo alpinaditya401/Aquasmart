@@ -41,7 +41,10 @@ def test_expire_commands_cli(app_):
     assert res.exit_code == 0, res.output
     assert "expired=1" in res.output
     with app_.app_context():
-        assert db.session.get(ActuatorCommand, "o" * 32).status == "expired"
+        # "timeout" is the terminal status in the SRS data dictionary, the PHP
+        # backend and the frontend schema; "expired" is in none of them.
+        old = db.session.get(ActuatorCommand, "o" * 32)
+        assert old.status == "timeout" and old.completed_at is not None
         assert db.session.get(ActuatorCommand, "n" * 32).status == "pending"
 
 

@@ -114,7 +114,7 @@ def create_app(config_name="default"):
 
     @app.cli.command("expire-commands")
     def expire_commands_cli():
-        """Ubah command pending yang kedaluwarsa menjadi 'expired'."""
+        """Ubah command pending yang kedaluwarsa menjadi 'timeout'."""
         from app.scheduler import expire_pending_commands
         with app.app_context():
             n = expire_pending_commands()

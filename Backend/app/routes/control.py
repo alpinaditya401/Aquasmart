@@ -89,7 +89,7 @@ def enqueue_command(device, user, actuator, value, duration, request_id=None,
         actuator=actuator, value=1 if value else 0, duration=duration,
         request_id=request_id, status="pending", simulation=0,
         created_at=now, expires_at=now + EXPIRES_SECONDS,
-        provenance="dashboard")
+        provenance="manual")
     db.session.add(cmd)
     try:
         db.session.commit()
