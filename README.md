@@ -7,7 +7,7 @@
 
 | Folder | Isi |
 |---|---|
-| `Backend/` | Backend Flask (Python) — pengganti PHP per SKPL V4.0. 89 test lulus (19 Okt 2026). Lihat `Backend/README.md` untuk cara menjalankan. |
+| `Backend/` | Backend Flask (Python) — pengganti PHP per SKPL V4.0. 140 test lulus (21 Okt 2026). Lihat `Backend/README.md` untuk cara menjalankan. |
 | `FrontEnd/` | Frontend Next.js 16 + BFF proxy. Set `AQUASMART_API_URL` ke URL backend Flask. |
 | `firmware/` | Firmware ESP32 (Arduino). Status: dites 10 Okt 2026, semua berhasil. |
 | `docs/` | SKPL V4.0, PRD, SRS, Arsitektur, Desain, Dokumen Rencana Penyelesaian. |
@@ -27,7 +27,7 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 export SECRET_KEY="isi-dengan-kunci-kuat"
 python wsgi.py   # → http://127.0.0.1:8080
-pytest -q        # → 89 passed
+pytest -q        # → 140 passed (21 Okt 2026)
 ```
 
 ## Catatan

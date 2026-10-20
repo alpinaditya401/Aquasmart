@@ -4,8 +4,10 @@
 > pada dokumen ini belum disetujui; jangan dikutip sebagai hasil final
 > yang sudah disahkan.
 
-Rewrite backend PHP → Flask (Python), kontrak API dipertahankan identik
-agar firmware ESP32 dan frontend Next.js tidak perlu diubah.
+Rewrite backend PHP → Flask (Python). Kontrak API mengikuti backend PHP lama
+supaya firmware ESP32 dan frontend Next.js tidak perlu diubah: bentuk respons
+untuk dashboard dan firmware dijaga oleh `tests/test_kontrak.py`. Selisih yang
+masih ada dicatat di `docs/API.md` bagian "Kondisi yang perlu diketahui".
 
 ## 1. Instalasi tech stack (Urgensi)
 
@@ -44,7 +46,7 @@ aquasmart-backend/
 │       ├── settings.py    # GET /api/settings/thresholds
 │       └── alerts.py      # GET /api/alerts
 │       └── control.py     # POST /api/devices/<id>/control (FR-018)
-├── tests/                 # 89 test pytest (dihitung 19 Okt 2026)
+├── tests/                 # 140 test pytest (dihitung 21 Okt 2026)
 ├── docs/API.md            # dokumentasi seluruh endpoint
 ├── Dockerfile, .dockerignore, docker-compose.yml
 ├── instance/aquasmart.sqlite  # salinan demo.sqlite (dev)
@@ -58,7 +60,7 @@ aquasmart-backend/
 export SECRET_KEY="ganti-dengan-yang-kuat"
 python wsgi.py            # dev → http://127.0.0.1:8080
 gunicorn wsgi:app         # production (Railway)
-pytest tests/ -q          # 89 passed pada 19 Okt 2026
+pytest tests/ -q          # 140 passed pada 21 Okt 2026
 ```
 
 ### Docker (backend + Postgres + Redis)
@@ -93,14 +95,16 @@ AQUASMART_API_URL=http://127.0.0.1:8080   # dev
 AQUASMART_API_URL=https://<flask>.up.railway.app  # production
 ```
 
-Bentuk respons Flask sudah disamakan dengan skema zod frontend
-(`{devices:[...]}`, `{readings:[...]}`, `{thresholds:{...}}`,
-`{alerts:[...], unacknowledged_count}`).
+Bentuk respons Flask untuk dashboard dijaga terhadap skema zod frontend
+(`FrontEnd/lib/api/schemas.ts`) oleh `tests/test_kontrak.py`. Yang belum ada:
+undangan dan anggota workspace (Won't di SRS). `/api/rules` berbeda bentuk, tetapi
+tidak dipanggil frontend.
 
 ## 5. Kontrak yang dipertahankan dari PHP
 
 - 3 endpoint firmware frozen (telemetry, poll, ack) + quirk dual-prefix
   `/api/devices` vs `/api/device/devices`
-- Telemetri ketat: `calibrated=false`, `ph_sensor=soil_placeholder`,
-  provenance cocok dengan simulation
+- Telemetri ketat: `calibrated` boolean (sejak 14 Okt `true` diterima; skema
+  frontend masih mengharapkan `false`), `ph_sensor=soil_placeholder`, provenance
+  cocok dengan simulation, `source_session` 8-64 karakter `[A-Za-z0-9_-]`
 - Error envelope + rate limit + threshold-rules-v2 + checksum SHA-256

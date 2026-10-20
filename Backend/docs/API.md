@@ -1,9 +1,13 @@
 # Dokumentasi API Backend AquaSmart (Flask)
 
-Dokumen ini ditulis dari kode di `app/routes/*.py` pada cabang `evaluasi-backend`
-(19 Oktober 2026). Kalau dokumen dan kode berbeda, kode yang benar. Perilaku
+Dokumen ini ditulis dari kode di `app/routes/*.py` pada cabang `perbaikan-kontrak`
+(21 Oktober 2026). Kalau dokumen dan kode berbeda, kode yang benar. Perilaku
 yang belum sesuai harapan dicatat di bagian [Kondisi yang perlu diketahui](#kondisi-yang-perlu-diketahui),
 bukan disembunyikan.
+
+Bentuk respons untuk dashboard mengikuti skema zod frontend
+(`FrontEnd/lib/api/schemas.ts`), yang ditulis dari backend PHP lama.
+`tests/test_kontrak.py` menjaga kecocokan itu.
 
 ## Dasar
 
@@ -84,17 +88,20 @@ hanya menjawab origin yang tercantum di `CORS_ORIGINS` (dipisah koma), dengan
 | GET | `/api/auth/me` | Sesi | Data pengguna yang login |
 | PATCH | `/api/profile` | Sesi + CSRF | Ubah nama atau nomor HP |
 | GET | `/api/devices` | Sesi | Daftar perangkat milik pengguna |
-| POST | `/api/devices/claim` | Sesi + CSRF | Klaim perangkat dari serial |
+| POST | `/api/devices` (alias `/api/devices/claim`) | Sesi + CSRF | Klaim perangkat dari serial |
 | PATCH | `/api/devices/{id}` | Sesi + CSRF | Ubah nama dan lokasi perangkat |
-| POST | `/api/devices/{id}/key/rotate` | Admin + CSRF | Buat device key baru |
+| POST | `/api/devices/{id}/key` (alias `/key/rotate`) | Admin + CSRF | Buat device key baru |
 | POST | `/api/devices/{id}/control` | Admin + CSRF | Kirim perintah aerator, feeder, atau mode auto |
+| GET | `/api/devices/{id}/commands` | Sesi | Riwayat command perangkat |
+| GET | `/api/devices/{id}/telemetry` | Sesi | Telemetri terbaru untuk panel diagnostik |
 | GET | `/api/devices/{id}/readings` | Sesi | Bacaan sensor ternormalisasi |
 | GET | `/api/reports` | Sesi | Agregasi harian per periode |
-| GET | `/api/devices/{id}/export.csv` | Sesi | Ekspor bacaan ke CSV |
+| GET | `/api/export` | Sesi | Ekspor JSON atau CSV per jenis data |
+| GET | `/api/devices/{id}/export.csv` | Sesi | Ekspor bacaan ke CSV (jalur lama) |
 | GET | `/api/alerts` | Sesi | Daftar alert |
-| POST | `/api/alerts/{id}/acknowledge` | Sesi + CSRF | Tandai alert sudah dibaca |
+| PATCH | `/api/alerts/{id}/acknowledge` (POST juga diterima) | Sesi + CSRF | Tandai alert sudah dibaca |
 | GET | `/api/settings/thresholds` | Sesi | Threshold milik pengguna |
-| PUT | `/api/settings/thresholds` | Admin + CSRF | Ubah threshold (membuat versi baru) |
+| PATCH | `/api/settings/thresholds` (PUT juga diterima) | Admin + CSRF | Ubah threshold (membuat versi baru) |
 | GET | `/api/rule-versions` | Sesi | Riwayat versi threshold |
 | GET | `/api/devices/{id}/schedules` | Sesi | Daftar jadwal pakan |
 | POST | `/api/devices/{id}/schedules` | Sesi + CSRF | Tambah jadwal pakan |
@@ -102,8 +109,11 @@ hanya menjawab origin yang tercantum di `CORS_ORIGINS` (dipisah koma), dengan
 | DELETE | `/api/schedules/{sid}` | Sesi + CSRF | Hapus jadwal pakan |
 | GET | `/api/devices/{id}/feeding-logs` | Sesi | Riwayat pemberian pakan |
 | POST | `/api/devices/{id}/feeding-logs` | Admin + CSRF | Perintah beri pakan sekarang |
-| GET | `/api/devices/{id}/observations` | Sesi | Daftar observasi pertumbuhan |
-| POST | `/api/devices/{id}/observations` | Sesi + CSRF | Catat observasi pertumbuhan |
+| GET | `/api/growth-observations` | Sesi | Daftar observasi pertumbuhan milik pengguna |
+| POST | `/api/growth-observations` | Admin + CSRF | Catat observasi pertumbuhan |
+| DELETE | `/api/growth-observations/{oid}` | Admin + CSRF | Hapus observasi pertumbuhan |
+| GET | `/api/devices/{id}/observations` | Sesi | Observasi per perangkat (jalur lama) |
+| POST | `/api/devices/{id}/observations` | Sesi + CSRF | Catat observasi per perangkat (jalur lama) |
 | GET | `/api/workspace` | Sesi | Workspace (model satu pengguna) |
 | GET | `/api/audit-logs` | Sesi | Audit log (belum diimplementasikan, selalu kosong) |
 | POST | `/api/devices/{id}/telemetry` | Device | Kirim telemetri dari ESP32 |
@@ -166,7 +176,7 @@ register. `401` bila kredensial salah. Password lama dari backend PHP (`$2y$`)
 tetap diterima.
 
 ### `POST /api/auth/logout`
-`200` `{"ok": true}`. Menghapus isi sesi.
+`200` `{"logged_out": true}`. Menghapus isi sesi.
 
 ### `GET /api/auth/me`
 `200` `{"user": {...}, "csrf_token": "<48 hex>"}`. `401` bila belum login.
@@ -191,7 +201,7 @@ Body opsional `{"name": "1-100 karakter", "phone": "maks 20 karakter"}`.
 ```
 `latest_reading` bernilai `null` bila belum ada bacaan.
 
-### `POST /api/devices/claim` (CSRF)
+### `POST /api/devices` (CSRF, alias `POST /api/devices/claim`)
 Body `{"serial_number": "AQS-001"}` (alias `serial` diterima). Serial diubah ke huruf
 besar dan harus cocok `^[A-Z0-9_-]{1,128}$`.
 `201` `{"device": {"id": "AQS-001", "name": "...", "location": "..."}}`.
@@ -201,7 +211,7 @@ besar dan harus cocok `^[A-Z0-9_-]{1,128}$`.
 Body `{"name": "1-100 karakter", "location": "1-150 karakter"}`, keduanya wajib.
 `200` `{"updated": true}`. `404` tidak ada, `403` bukan milik pengguna.
 
-### `POST /api/devices/{id}/key/rotate` (Admin, CSRF)
+### `POST /api/devices/{id}/key` (Admin, CSRF, alias `/key/rotate`)
 `200`:
 ```json
 {"device_id": "AQS-001", "device_key": "<key mentah>",
@@ -220,22 +230,44 @@ Body:
 | `request_id` | Opsional, untuk idempotensi |
 | `simulation` | Bila `true`, ditolak `422` |
 
-- `auto` hanya mengubah mode perangkat: `200` `{"ok": true, "device_id": "...", "auto": true}`.
-- `aerator` atau `feeder` masuk antrian: `201` `{"command": {...}}`. Bentuk command:
-  `{id, device_id, actuator, value, duration, request_id, status: "pending", created_at, expires_at}`
-  (waktu dalam epoch detik, kedaluwarsa 300 detik).
+Respons selalu `{"device": {...}, "command": {...} | null}`, `device` berbentuk
+sama dengan `GET /api/devices`.
+- `auto` hanya mengubah mode perangkat: `200` dengan `command` `null`.
+- `aerator` atau `feeder` masuk antrian: `201`. Bentuk command:
+  `{id, device_id, user_id, actuator, value, duration, request_id, status, simulation,
+  created_at, expires_at, delivered_at, completed_at, provenance, source_session}`
+  (waktu dalam epoch detik, kedaluwarsa 300 detik). Command dari dashboard
+  ber-`simulation: false` dan `provenance: "manual"`, jadi firmware mau menjalankannya.
 - `request_id` yang sama dengan parameter sama mengembalikan command lama (`200`).
   Parameter berbeda: `409`.
 - `409` bila aktuator yang sama masih punya perintah `pending` atau `delivered`.
 
 Respons sukses berarti perintah **tersimpan di antrian**, bukan bukti aktuator
-fisik bergerak. Bukti aktuasi hanya dari ack perangkat.
+fisik bergerak. Status `aerator` di perangkat baru berubah setelah firmware
+mengirim ack `succeeded`.
+
+### `GET /api/devices/{id}/commands`
+100 command terbaru perangkat (semua status), terbaru dulu. Hanya pemilik (`404`
+bila bukan). `200` `{"commands": [{...}]}` dengan bentuk command di atas.
 
 ## Data sensor dan laporan
 
+### `GET /api/devices/{id}/telemetry?limit=100`
+Hanya untuk pemilik perangkat (`404` bila bukan). `limit` 1-100 (`422` di luar itu).
+Telemetri terbaru dulu, dinormalisasi dari payload mentah:
+`200` `{"telemetry": [{created_at, received_at, provenance, simulation, source_session,
+temperature, temperature_status, turbidity_adc, turbidity_mv, turbidity_sensor_mv,
+turbidity_mapping_percent, soil_ph_adc, soil_ph_mv, tds_adc, tds_mv, tds_ppm_estimate,
+water_distance_cm, tank_height_cm, water_level_percent, water_level_reference_confirmed,
+water_probes_immersed, ph_sensor, calibrated}], "notice": "PLACEHOLDER SENSOR TANAH, ..."}`.
+`tds_ppm_estimate` memakai kurva DFRobot SEN0244 pada 25 C tanpa kalibrasi, dan
+`water_level_percent` dihitung dari `water_distance_cm` dan `tank_height_cm`. Keduanya
+estimasi, rumusnya sama dengan backend PHP. Field bertipe salah di payload dibaca `null`.
+
 ### `GET /api/devices/{id}/readings?limit=50`
 Hanya untuk pemilik perangkat. Perangkat milik akun lain dijawab `404`.
-`limit` 1-100. Urut dari yang paling lama.
+`limit` 1-100. Berisi `limit` bacaan terbaru, diurutkan dari yang paling lama
+untuk grafik.
 `200` `{"readings": [{time, ph, temperature, turbidity, simulation, provenance, source_session}]}`.
 
 ### `GET /api/reports?device_id=&period=day|week|month&date=YYYY-MM-DD`
@@ -246,9 +278,29 @@ Hanya untuk pemilik perangkat (`404` bila bukan). Agregasi harian UTC. Minggu di
  "start_at": "2026-10-19T00:00:00Z", "end_at_exclusive": "2026-10-26T00:00:00Z",
  "groups": [{"day": "2026-10-19", "cnt": 12, "ph_avg": 7.05,
              "temperature_avg": 27.3, "turbidity_avg": 10.4,
-             "simulation_samples": 0, "non_simulation_samples": 12}],
- "total_samples": 12}
+             "simulation_samples": 0, "non_simulation_samples": 12,
+             "source_simulation": 0, "source_device": 12, "source_manual": 0,
+             "source_seed": 0, "source_legacy_unverified": 0}],
+ "total_samples": 12,
+ "source_counts": {"simulation": 0, "device": 12, "manual": 0, "seed": 0,
+                   "legacy_unverified": 0},
+ "simulation_samples": 0, "non_simulation_samples": 12}
 ```
+Provenance di luar lima nilai itu dihitung sebagai `legacy_unverified`.
+
+### `GET /api/export?device_id=&kind=&period=day|week|month&date=YYYY-MM-DD&format=json|csv`
+Dipakai tautan unduhan di halaman Laporan; meniru `ExportRepository` backend PHP.
+`kind`: `readings`, `alerts`, `commands`, `feeding_logs` (feeder yang sudah selesai),
+`reports` (grup harian), atau `telemetry`. Jendela UTC sama dengan `/api/reports`.
+- JSON `200` `{"meta": {device_id, kind, period, date, timezone: "UTC", start_at,
+  end_at_exclusive, hardware_verified: false, source_counts}, "rows": [...]}`. Pada
+  baris alert dan command, `acknowledged` dan `value` bernilai `0` atau `1`.
+- CSV `200` sebagai lampiran `aquasmart-export.csv` dengan kolom seperti PHP ditambah
+  `source_simulation` sampai `source_legacy_unverified`. Sel teks yang diawali
+  `= + - @` (boleh didahului spasi) diberi awalan `'`.
+- Header `X-Export-Rows` dan `X-Provenance-Counts` (JSON) ikut di kedua format.
+- `422` filter atau format tidak valid, atau lebih dari 10.000 baris. `404` perangkat
+  bukan milik pengguna.
 
 ### `GET /api/devices/{id}/export.csv?from=YYYY-MM-DD&to=YYYY-MM-DD`
 `200` `text/csv` sebagai lampiran `aquasmart-{id}-{from}-{to}.csv`. Kolom:
@@ -262,9 +314,11 @@ yang diawali `= + - @` diberi awalan `'` untuk mencegah formula injection.
 Hanya alert dari perangkat milik pengguna. `limit` 1-100. Urut terbaru dulu.
 `unacknowledged_count` menghitung semua alert pengguna yang belum dibaca, bukan
 hanya yang ada di halaman ini.
-`200` `{"alerts": [{id, device_id, severity, message, acknowledged, created_at, acknowledged_at, provenance, source_session}], "unacknowledged_count": 3}`.
+`200` `{"alerts": [{id, device_id, severity, message, source, acknowledged, created_at, acknowledged_at, acknowledged_by, provenance, source_session}], "unacknowledged_count": 3}`.
+`source` adalah label provenance yang sama dengan PHP, misalnya `SIMULASI` atau
+`DEVICE / kalibrasi belum diverifikasi`.
 
-### `POST /api/alerts/{id}/acknowledge` (CSRF)
+### `PATCH /api/alerts/{id}/acknowledge` (CSRF, POST juga diterima)
 `200` `{"alert": {...}}`. `404` tidak ada, `403` bukan perangkat pengguna,
 `409` sudah di-acknowledge.
 
@@ -274,14 +328,17 @@ hanya yang ada di halaman ini.
 `200` `{"thresholds": {ph_min, ph_max, temperature_min, temperature_max, turbidity_max}}`.
 Bila pengguna belum pernah menyimpan, nilai bawaan `/api/rules` yang dikembalikan.
 
-### `PUT /api/settings/thresholds` (Admin, CSRF)
+### `PATCH /api/settings/thresholds` (Admin, CSRF, PUT juga diterima)
 Body berisi kelima field di atas, semuanya angka. Aturan: pH 0-14, `ph_min <= ph_max`,
 `temperature_min <= temperature_max`, `turbidity_max >= 0`.
 `200` `{"thresholds": {...}, "rule_version": "2"}`. Setiap simpan membuat versi baru.
 
 ### `GET /api/rule-versions`
 50 versi terakhir milik pengguna:
-`200` `{"versions": [{id, version, created_at, config}], "note": "..."}`.
+`200` `{"versions": [{id, version, created_at, reading_count, config}], "note": "..."}`.
+`id` adalah SHA-256 (64 hex) dari user, versi, dan konfigurasi. `reading_count` adalah
+jumlah bacaan yang disimpan saat versi itu berlaku (tabel `reading_rule_versions`);
+bacaan sebelum versi pertama tidak dihitung.
 
 ## Jadwal pakan
 
@@ -310,7 +367,7 @@ Body sama dengan POST. `200` `{"schedule": {...}}`.
 
 ### `GET /api/devices/{id}/feeding-logs`
 100 command feeder terakhir yang sudah selesai (`succeeded`, `failed`, `timeout`):
-`200` `{"feeding_logs": [{id, device_id, actuator, value, duration, status, request_id, created_at, completed_at}]}`.
+`200` `{"feeding_logs": [{...}]}` dengan bentuk command yang sama dengan `/control`.
 
 ### `POST /api/devices/{id}/feeding-logs` (Admin, CSRF)
 Body `{"duration": 1-10, "request_id": "opsional"}`, `duration` bawaan 5.
@@ -319,13 +376,21 @@ Aturannya sama dengan `control` untuk feeder. `201` `{"feeding_log": {...}}`,
 
 ## Observasi pertumbuhan
 
-### `GET /api/devices/{id}/observations`
+### `GET /api/growth-observations`
+200 observasi terbaru milik pengguna, semua perangkat:
 `200` `{"observations": [{id, user_id, device_id, observed_at, weight_g, length_cm, notes, created_at, provenance, source_session}]}`.
 
-### `POST /api/devices/{id}/observations` (CSRF)
-Body: `observed_at` (`YYYY-MM-DD`, tidak boleh tanggal masa depan) dan minimal satu dari
-`weight_g` (angka >= 0), `length_cm` (angka >= 0), `notes` (maks 2000 karakter).
-`201` `{"observation": {...}}`.
+### `POST /api/growth-observations` (Admin, CSRF)
+Body: `device_id` (perangkat milik pengguna, `404` bila bukan), `observed_at`
+(`YYYY-MM-DD`, tidak boleh setelah hari ini UTC), dan minimal satu dari `weight_g`
+(angka > 0), `length_cm` (angka > 0), `notes` (maks 2000 karakter).
+`201` `{"observation": {...}}` dengan `provenance: "manual"`.
+
+### `DELETE /api/growth-observations/{oid}` (Admin, CSRF)
+`200` `{"deleted": true}`. `404` bila tidak ada atau bukan milik pengguna.
+
+### `GET` dan `POST /api/devices/{id}/observations` (jalur lama)
+Bentuk respons dan aturan validasi sama dengan di atas, perangkat diambil dari path.
 
 ## Workspace
 
@@ -365,7 +430,7 @@ Contoh body:
 | `simulation` | boolean, harus cocok dengan `provenance` |
 | `provenance` | `device` atau `simulation` |
 | `source` | `hardware` atau `simulated`, bawaan `simulated` |
-| `source_session` | 8-64 karakter alfanumerik |
+| `source_session` | 8-64 karakter huruf, angka, `_`, atau `-` (firmware mengirim `esp32-<efuse>-<acak>`) |
 | `calibrated` | boolean, wajib |
 | `ph_sensor` | harus `soil_placeholder` (sensor pH yang ada adalah sensor tanah) |
 | `temperature_status` | `ok`, `disconnected`, atau `unverified` |
@@ -416,28 +481,35 @@ lebih lama dari bacaan terakhir tetap disimpan, tetapi tidak dinilai. Port dari
 
 ### `GET /api/device/devices/{id}/commands`
 Mengambil command `pending` yang belum kedaluwarsa dan mengubahnya jadi `delivered`.
-`200` `{"commands": [{...}]}`. Poll berikutnya tidak mengembalikan command yang sama.
+`200` `{"commands": [{...}]}` dengan bentuk command yang sama dengan `/control`.
+Firmware hanya menjalankan command yang `simulation`-nya boolean `false`.
+Poll berikutnya tidak mengembalikan command yang sama.
 
 ### `POST /api/device/devices/{id}/commands/{cid}/ack`
 Body `{"status": "succeeded" | "failed" | "timeout"}`.
 `200` `{"ok": true, "id": "...", "status": "succeeded"}`.
 `409` bila command tidak ditemukan, belum di-poll, atau sudah selesai. Firmware
-menganggap `409` sebagai final dan tidak mengaktuasi ulang.
+menganggap `409` sebagai final dan tidak mengaktuasi ulang. Ack `succeeded` untuk
+aerator menyimpan nilai aerator di perangkat.
 
 Siklus command: `pending` -> `delivered` -> `succeeded` / `failed` / `timeout`.
-Command `pending` yang lewat batas diubah jadi `expired` oleh
-`flask expire-commands` atau scheduler (`SCHEDULER_ENABLED=true`).
+Command `pending` yang lewat batas diubah jadi `timeout` (dengan `completed_at`) oleh
+`flask expire-commands` atau scheduler (`SCHEDULER_ENABLED=true`). Command lama
+ber-provenance `dashboard` diganti `manual` oleh migrasi saat boot.
 
 ---
 
 ## Kondisi yang perlu diketahui
 
-Temuan pemeriksaan kode 19 Oktober 2026.
+Temuan pemeriksaan kode 19 dan 21 Oktober 2026.
 
-Sudah diperbaiki di cabang ini:
+Sudah diperbaiki:
 - Pengecekan pemilik data ditambahkan di `GET /api/alerts`,
   `GET /api/devices/{id}/readings`, dan `GET /api/reports`.
 - `POST /api/devices/{id}/readings` sekarang mengisi `sensor_readings` dan membuat alert.
+- 21 Oktober: endpoint dan bentuk respons yang dipakai frontend disamakan dengan
+  skema zod frontend; `source_session` dan command disamakan dengan firmware.
+  Lihat `tests/test_kontrak.py`.
 
 Belum ditangani:
 1. **Firmware belum mengirim ke `/readings`.** Sketsa ESP32 saat ini hanya mengirim
@@ -450,3 +522,13 @@ Belum ditangani:
    tidak ikut.
 5. **Kontrol aktuator belum terbukti di perangkat fisik.** API hanya mencatat
    antrian dan ack.
+6. **Undangan dan anggota workspace tidak ada** (`/api/invitations`,
+   `/api/invitations/accept`, `DELETE /api/workspace/members/{id}`; berstatus Won't di
+   SRS). Form-nya tetap tampil di frontend dan akan dijawab `404`.
+7. **`GET /api/rules` berbeda bentuk dari skema `Rules` frontend.** Frontend dan
+   firmware tidak memanggilnya, jadi bentuk Flask dipertahankan.
+8. **`calibrated: true` diterima telemetri**, tetapi skema frontend mewajibkan
+   `calibrated: false`. Baris seperti itu akan ditolak panel telemetri dashboard.
+   Firmware saat ini selalu mengirim `false`.
+9. **Durasi feeder 1-10 detik** (SRS FR-018), sedangkan form frontend menerima
+   sampai 30. Nilai 11-30 dijawab `422`.
