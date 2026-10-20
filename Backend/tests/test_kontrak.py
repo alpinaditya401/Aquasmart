@@ -371,3 +371,30 @@ def test_versi_rule_memuat_id_sha256_dan_jumlah_bacaan(client):
     # Each reading counts toward the version that was in force when it arrived.
     assert (newest["reading_count"], older["reading_count"]) == (1, 2)
     assert older["config"] == THRESHOLDS and newest["config"]["ph_max"] == 8.5
+
+
+def test_klaim_perangkat_lewat_post_devices(client):
+    from app.models import DeviceInventory
+    with client.application.app_context():
+        db.session.add(DeviceInventory(serial_number="AQS-BARU-01",
+                                       default_name="Perangkat AquaSmart",
+                                       default_location="Belum diatur"))
+        db.session.commit()
+    h = _login(client)
+    r = client.post("/api/devices", json={"serial_number": "aqs-baru-01"}, headers=h)
+    assert r.status_code == 201, r.json
+    assert r.json["device"] == {"id": "AQS-BARU-01", "name": "Perangkat AquaSmart",
+                                "location": "Belum diatur"}
+    again = client.post("/api/devices", json={"serial_number": "AQS-BARU-01"}, headers=h)
+    assert again.status_code == 409
+
+
+def test_terbitkan_key_lewat_post_key(client):
+    h = _login(client)
+    r = client.post(f"/api/devices/{DEVICE}/key", json={}, headers=h)
+    assert r.status_code == 200, r.json
+    assert r.json["device_id"] == DEVICE and r.json["device_key"] and r.json["notice"]
+    assert _post_telemetry(client).status_code == 401
+    fresh = client.post(f"/api/devices/{DEVICE}/telemetry", json=_telemetry(),
+                        headers={"X-Device-Key": r.json["device_key"]})
+    assert fresh.status_code == 201
