@@ -1,7 +1,8 @@
-"""Alerts: GET /api/alerts, POST /api/alerts/<id>/acknowledge (FR-022, FR-023).
+"""Alerts: GET /api/alerts, POST|PATCH /api/alerts/<id>/acknowledge (FR-022, FR-023).
 
 Bentuk respons mengikuti skema frontend (AlertsResponse / AlertAcknowledged):
-{ alerts: [...], unacknowledged_count: n } dan { alert: {...} }.
+{ alerts: [...], unacknowledged_count: n } dan { alert: {...} }. Frontend
+mengirim PATCH seperti backend PHP; POST tetap diterima.
 """
 from datetime import datetime, timezone
 
@@ -24,22 +25,12 @@ def list_alerts():
     own = (Alert.query.join(Device, Alert.device_id == Device.id)
            .filter(Device.user_id == g.user.id))
     rows = own.order_by(Alert.created_at.desc()).limit(limit).all()
-    alerts = [{
-        "id": a.id,
-        "device_id": a.device_id,
-        "severity": a.severity,
-        "message": a.message,
-        "acknowledged": bool(a.acknowledged),
-        "created_at": a.created_at,
-        "acknowledged_at": a.acknowledged_at,
-        "provenance": a.provenance,
-        "source_session": a.source_session,
-    } for a in rows]
     unack = own.filter(Alert.acknowledged == 0).count()
-    return jsonify({"alerts": alerts, "unacknowledged_count": unack}), 200
+    return jsonify({"alerts": [a.to_dict() for a in rows],
+                    "unacknowledged_count": unack}), 200
 
 
-@bp.post("/api/alerts/<int:alert_id>/acknowledge")
+@bp.route("/api/alerts/<int:alert_id>/acknowledge", methods=["POST", "PATCH"])
 @login_required
 @csrf_required
 def acknowledge(alert_id):

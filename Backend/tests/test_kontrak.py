@@ -83,3 +83,52 @@ def test_telemetri_terima_source_session_format_firmware(client, session):
                                      "esp32/a1b2c3", "esp32-a1b2c3\n"])
 def test_telemetri_tolak_source_session_tidak_valid(client, session):
     assert _post_telemetry(client, source_session=session).status_code == 422
+
+
+# --- frontend: alerts ---
+ALERT_KEYS = {"id", "device_id", "severity", "message", "source", "provenance",
+              "source_session", "acknowledged", "created_at", "acknowledged_at"}
+
+
+def _post_reading(client, **kw):
+    body = {"ph": 7.2, "temperature": 27.0, "turbidity": 10.0,
+            "created_at": "2026-10-20T02:00:00Z"}
+    body.update(kw)
+    return client.post(f"/api/devices/{DEVICE}/readings", json=body,
+                       headers={"X-Device-Key": KEY})
+
+
+def _assert_alert(alert):
+    assert ALERT_KEYS <= alert.keys(), ALERT_KEYS - alert.keys()
+    assert alert["provenance"] in PROVENANCE
+    assert isinstance(alert["source"], str) and alert["source"]
+    assert UTC.match(alert["created_at"])
+
+
+@pytest.mark.parametrize("simulation,label", [
+    (False, "DEVICE / kalibrasi belum diverifikasi"), (True, "SIMULASI")])
+def test_alerts_memuat_field_kontrak(client, simulation, label):
+    assert _post_reading(client, ph=9.3, simulation=simulation).status_code == 201
+    _login(client)
+    r = client.get("/api/alerts?limit=1")
+    assert r.status_code == 200
+    _assert_alert(r.json["alerts"][0])
+    assert r.json["alerts"][0]["source"] == label
+
+
+def test_ack_alert_lewat_patch_seperti_frontend(client):
+    _post_reading(client, ph=9.3)
+    h = _login(client)
+    alert_id = client.get("/api/alerts").json["alerts"][0]["id"]
+    r = client.patch(f"/api/alerts/{alert_id}/acknowledge", headers=h)
+    assert r.status_code == 200, r.json
+    _assert_alert(r.json["alert"])
+    assert r.json["alert"]["acknowledged"] is True
+    assert client.get("/api/alerts").json["unacknowledged_count"] == 0
+
+
+def test_ack_alert_patch_tanpa_csrf_403(client):
+    _post_reading(client, ph=9.3)
+    _login(client)
+    alert_id = client.get("/api/alerts").json["alerts"][0]["id"]
+    assert client.patch(f"/api/alerts/{alert_id}/acknowledge").status_code == 403

@@ -5,6 +5,19 @@ demo.sqlite / database production lama bisa dipakai langsung.
 """
 from app import db
 
+# Display labels from the PHP backend's Provenance::label(); the frontend shows
+# them as the alert's source.
+PROVENANCE_LABELS = {
+    "simulation": "SIMULASI",
+    "device": "DEVICE / kalibrasi belum diverifikasi",
+    "manual": "MANUAL",
+    "seed": "SEED / data contoh",
+}
+
+
+def provenance_label(provenance):
+    return PROVENANCE_LABELS.get(provenance, "LEGACY / UNVERIFIED")
+
 
 class User(db.Model):
     __tablename__ = "users"
@@ -160,6 +173,7 @@ class Alert(db.Model):
             "device_id": self.device_id,
             "severity": self.severity,
             "message": self.message,
+            "source": provenance_label(self.provenance),
             "acknowledged": bool(self.acknowledged),
             "created_at": self.created_at,
             "acknowledged_at": self.acknowledged_at,
