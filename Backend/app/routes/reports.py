@@ -2,7 +2,8 @@
 
 Query: ?device_id=&period=day|week|month&date=YYYY-MM-DD
 Bucket harian UTC dari sensor_readings. Periode kosong → groups kosong
-(tidak difabrikasi).
+(tidak difabrikasi). Setiap grup dan total memuat hitungan per provenance
+(source_counts / source_*) seperti skema Report frontend.
 """
 from datetime import datetime, timedelta
 
@@ -13,6 +14,12 @@ from app.auth import login_required
 from app.models import Device, SensorReading
 
 bp = Blueprint("reports", __name__)
+
+SOURCES = ("simulation", "device", "manual", "seed", "legacy_unverified")
+
+
+def _source(reading):
+    return reading.provenance if reading.provenance in SOURCES else "legacy_unverified"
 
 
 @bp.get("/api/reports")
@@ -50,10 +57,12 @@ def reports():
     for r in rows:
         key = r.created_at[:10]
         b = buckets.setdefault(key, {"ph": [], "temperature": [],
-                                     "turbidity": [], "sim": 0, "nonsim": 0})
+                                     "turbidity": [], "sim": 0, "nonsim": 0,
+                                     "sources": dict.fromkeys(SOURCES, 0)})
         b["ph"].append(r.ph)
         b["temperature"].append(r.temperature)
         b["turbidity"].append(r.turbidity)
+        b["sources"][_source(r)] += 1
         if r.simulation:
             b["sim"] += 1
         else:
@@ -70,7 +79,13 @@ def reports():
         "turbidity_avg": avg(v["turbidity"]),
         "simulation_samples": v["sim"],
         "non_simulation_samples": v["nonsim"],
+        **{f"source_{s}": n for s, n in v["sources"].items()},
     } for k, v in sorted(buckets.items())]
+
+    source_counts = dict.fromkeys(SOURCES, 0)
+    for r in rows:
+        source_counts[_source(r)] += 1
+    simulation_samples = sum(1 for r in rows if r.simulation)
 
     return jsonify({
         "device_id": device_id,
@@ -81,4 +96,7 @@ def reports():
         "end_at_exclusive": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "groups": groups,
         "total_samples": len(rows),
+        "source_counts": source_counts,
+        "simulation_samples": simulation_samples,
+        "non_simulation_samples": len(rows) - simulation_samples,
     }), 200

@@ -319,3 +319,21 @@ def test_readings_ambil_yang_terbaru_urut_naik(client):
     rows = client.get(f"/api/devices/{DEVICE}/readings?limit=2").json["readings"]
     # The dashboard asks for limit=18 and labels the chart "pembacaan terbaru".
     assert [r["time"] for r in rows] == ["2026-10-20T02:02:00Z", "2026-10-20T02:03:00Z"]
+
+
+# --- frontend: laporan ---
+def test_reports_memuat_hitungan_sumber(client):
+    _post_reading(client, created_at="2026-10-20T02:00:00Z")
+    _post_reading(client, created_at="2026-10-20T03:00:00Z")
+    _post_reading(client, created_at="2026-10-20T04:00:00Z", simulation=True)
+    _login(client)
+    r = client.get(f"/api/reports?device_id={DEVICE}&period=day&date=2026-10-20")
+    assert r.status_code == 200, r.json
+    counts = {"simulation": 1, "device": 2, "manual": 0, "seed": 0,
+              "legacy_unverified": 0}
+    assert r.json["source_counts"] == counts
+    assert r.json["simulation_samples"] == 1
+    assert r.json["non_simulation_samples"] == 2
+    group = r.json["groups"][0]
+    assert {k: group[f"source_{k}"] for k in counts} == counts
+    assert group["cnt"] == 3 and group["simulation_samples"] == 1
