@@ -1,4 +1,8 @@
-"""Kontrol aktuator dari dashboard: POST /api/devices/<id>/control (FR-018).
+"""Kontrol aktuator dari dashboard (FR-018).
+
+- POST /api/devices/<id>/control → {device, command} (command null untuk auto),
+  bentuk ControlResult frontend.
+- GET  /api/devices/<id>/commands → {commands: [...]} 100 terbaru, pemilik saja.
 
 Lengkapi lifecycle perintah aktuator:
   dashboard enqueue (FR-018) → firmware poll (FR-016) → firmware ack (FR-017)
@@ -23,6 +27,7 @@ from sqlalchemy.exc import IntegrityError
 from app import db, errors
 from app.auth import csrf_required, login_required
 from app.models import ActuatorCommand, Device
+from app.routes.devices import _device_dict
 
 bp = Blueprint("control", __name__)
 
@@ -54,8 +59,7 @@ def enqueue_command(device, user, actuator, value, duration, request_id=None,
     if actuator == "auto":
         device.auto_mode = 1 if value else 0
         db.session.commit()
-        return ({"ok": True, "device_id": device.id,
-                 "auto": bool(device.auto_mode)}, 200)
+        return {"command": None}, 200
 
     if actuator == "feeder":
         if (isinstance(duration, bool) or not isinstance(duration, int)
@@ -120,4 +124,17 @@ def control(device_id):
         simulation=body.get("simulation") is True)
     if code is None:
         return payload  # error response
-    return jsonify(payload), code
+    return jsonify({"device": _device_dict(device),
+                    "command": payload["command"]}), code
+
+
+@bp.get("/api/devices/<device_id>/commands")
+@login_required
+def list_commands(device_id):
+    device = Device.query.filter_by(id=device_id, user_id=g.user.id).first()
+    if not device:
+        return errors.not_found("Device tidak ditemukan.")
+    rows = (ActuatorCommand.query.filter_by(device_id=device.id)
+            .order_by(ActuatorCommand.created_at.desc(), ActuatorCommand.id.desc())
+            .limit(100).all())
+    return jsonify({"commands": [c.to_dict() for c in rows]}), 200

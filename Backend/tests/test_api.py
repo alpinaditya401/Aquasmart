@@ -308,14 +308,14 @@ def test_control_auto_tidak_masuk_antrian(client):
     r = _post_control(client, {"actuator": "auto", "value": True},
                       csrf_token=csrf)
     assert r.status_code == 200, r.json
-    assert r.json["auto"] is True
+    assert r.json["command"] is None and r.json["device"]["auto"] is True
     assert _command_count(client.application, device_id=DEVICE_ID) == 0
     with client.application.app_context():
         d = db.session.get(Device, DEVICE_ID)
         assert bool(d.auto_mode) is True
     r2 = _post_control(client, {"actuator": "auto", "value": False},
                        csrf_token=csrf)
-    assert r2.status_code == 200 and r2.json["auto"] is False
+    assert r2.status_code == 200 and r2.json["device"]["auto"] is False
 
 
 def test_control_simulation_ditolak_422(client):

@@ -1,6 +1,6 @@
 """Feeding logs (FR-020): riwayat perintah feeder berstatus terminal.
 
-- GET  /api/devices/<id>/feeding-logs → {feeding_logs: [...]}
+- GET  /api/devices/<id>/feeding-logs → {feeding_logs: [...]} (bentuk Command)
 - POST /api/devices/<id>/feeding-logs → enqueue perintah feeder
   (session admin + CSRF), body {duration 1-10, request_id?} → 201.
 
@@ -29,20 +29,6 @@ def _owned_device(device_id):
     return device, None
 
 
-def _log_dict(c):
-    return {
-        "id": c.id,
-        "device_id": c.device_id,
-        "actuator": c.actuator,
-        "value": bool(c.value),
-        "duration": c.duration,
-        "status": c.status,
-        "request_id": c.request_id,
-        "created_at": c.created_at,
-        "completed_at": c.completed_at,
-    }
-
-
 @bp.get("/api/devices/<device_id>/feeding-logs")
 @login_required
 def list_feeding_logs(device_id):
@@ -54,7 +40,7 @@ def list_feeding_logs(device_id):
             .filter(ActuatorCommand.status.in_(TERMINAL))
             .order_by(ActuatorCommand.created_at.desc())
             .limit(100).all())
-    return jsonify({"feeding_logs": [_log_dict(c) for c in rows]}), 200
+    return jsonify({"feeding_logs": [c.to_dict() for c in rows]}), 200
 
 
 @bp.post("/api/devices/<device_id>/feeding-logs")
@@ -77,7 +63,7 @@ def create_feeding_log(device_id):
         cmd = ActuatorCommand.query.filter_by(
             device_id=device.id,
             request_id=body.get("request_id")).first()
-        return jsonify({"feeding_log": _log_dict(cmd)}), 200
+        return jsonify({"feeding_log": cmd.to_dict()}), 200
     cmd = ActuatorCommand.query.filter_by(
         id=payload["command"]["id"]).first()
-    return jsonify({"feeding_log": _log_dict(cmd)}), 201
+    return jsonify({"feeding_log": cmd.to_dict()}), 201

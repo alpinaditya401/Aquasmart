@@ -7,6 +7,7 @@ buildTelemetry() di firmware/esp32/aquasmart_esp32/aqs_network.h.
 """
 import hashlib
 import re
+import time
 
 import bcrypt
 import pytest
@@ -237,3 +238,66 @@ def test_migrasi_provenance_dashboard_jadi_manual(client):
         db.session.commit()
         ensure_columns(db)
         assert db.session.get(ActuatorCommand, "a" * 32).provenance == "manual"
+
+
+# --- frontend: halaman Kontrol ---
+DEVICE_KEYS = {"id", "name", "location", "online", "aerator", "feeder", "auto",
+               "last_seen", "latest_reading"}
+
+
+def _control(client, h, **body):
+    return client.post(f"/api/devices/{DEVICE}/control", json=body, headers=h)
+
+
+def _poll_and_ack(client, status):
+    cmd = client.get(f"/api/device/devices/{DEVICE}/commands",
+                     headers={"X-Device-Key": KEY}).json["commands"][0]
+    r = client.post(f"/api/device/devices/{DEVICE}/commands/{cmd['id']}/ack",
+                    json={"status": status}, headers={"X-Device-Key": KEY})
+    assert r.status_code == 200, r.json
+
+
+def test_control_respons_device_dan_command(client):
+    h = _login(client)
+    r = _control(client, h, actuator="aerator", value=True)
+    assert r.status_code == 201, r.json
+    assert DEVICE_KEYS <= r.json["device"].keys() and r.json["device"]["id"] == DEVICE
+    _assert_command(r.json["command"])
+    r = _control(client, h, actuator="auto", value=True)
+    assert r.status_code == 200, r.json
+    assert r.json["command"] is None and r.json["device"]["auto"] is True
+
+
+def test_daftar_command_per_device(client, monkeypatch):
+    assert client.get(f"/api/devices/{DEVICE}/commands").status_code == 401
+    h = _login(client)
+    # Two commands in the same second would be ordered by their random ids.
+    now = int(time.time())
+    monkeypatch.setattr(time, "time", lambda: now)
+    _control(client, h, actuator="aerator", value=True)
+    monkeypatch.setattr(time, "time", lambda: now + 5)
+    _control(client, h, actuator="feeder", value=True, duration=2)
+    r = client.get(f"/api/devices/{DEVICE}/commands")
+    assert r.status_code == 200, r.json
+    assert [c["actuator"] for c in r.json["commands"]] == ["feeder", "aerator"]
+    for cmd in r.json["commands"]:
+        _assert_command(cmd)
+    assert client.get("/api/devices/AQS-LAIN/commands").status_code == 404
+
+
+def test_feeding_logs_berbentuk_command(client):
+    h = _login(client)
+    _control(client, h, actuator="feeder", value=True, duration=2)
+    _poll_and_ack(client, "succeeded")
+    logs = client.get(f"/api/devices/{DEVICE}/feeding-logs").json["feeding_logs"]
+    assert len(logs) == 1
+    _assert_command(logs[0])
+
+
+@pytest.mark.parametrize("status,aerator", [("succeeded", True), ("failed", False)])
+def test_status_aerator_ikut_ack_firmware(client, status, aerator):
+    h = _login(client)
+    _control(client, h, actuator="aerator", value=True)
+    assert client.get("/api/devices").json["devices"][0]["aerator"] is False
+    _poll_and_ack(client, status)
+    assert client.get("/api/devices").json["devices"][0]["aerator"] is aerator
