@@ -337,3 +337,37 @@ def test_reports_memuat_hitungan_sumber(client):
     group = r.json["groups"][0]
     assert {k: group[f"source_{k}"] for k in counts} == counts
     assert group["cnt"] == 3 and group["simulation_samples"] == 1
+
+
+# --- frontend: halaman Pengaturan ---
+THRESHOLDS = {"ph_min": 6.0, "ph_max": 8.0, "temperature_min": 24.0,
+              "temperature_max": 31.0, "turbidity_max": 40.0}
+
+
+def test_threshold_lewat_patch_seperti_frontend(client):
+    h = _login(client)
+    r = client.patch("/api/settings/thresholds", json=THRESHOLDS, headers=h)
+    assert r.status_code == 200, r.json
+    assert r.json["thresholds"] == THRESHOLDS
+    assert client.get("/api/settings/thresholds").json["thresholds"] == THRESHOLDS
+
+
+def test_versi_rule_memuat_id_sha256_dan_jumlah_bacaan(client):
+    h = _login(client)
+    _post_reading(client, created_at="2026-10-20T01:00:00Z")  # before any version
+    client.patch("/api/settings/thresholds", json=THRESHOLDS, headers=h)
+    _post_reading(client, created_at="2026-10-20T02:00:00Z")
+    _post_reading(client, created_at="2026-10-20T02:01:00Z")
+    client.patch("/api/settings/thresholds", json={**THRESHOLDS, "ph_max": 8.5},
+                 headers=h)
+    _post_reading(client, created_at="2026-10-20T03:00:00Z")
+    r = client.get("/api/rule-versions")
+    assert r.status_code == 200
+    newest, older = r.json["versions"]
+    for v in (newest, older):
+        assert re.fullmatch(r"[0-9a-f]{64}", v["id"])
+        assert UTC.match(v["created_at"])
+    assert newest["id"] != older["id"]
+    # Each reading counts toward the version that was in force when it arrived.
+    assert (newest["reading_count"], older["reading_count"]) == (1, 2)
+    assert older["config"] == THRESHOLDS and newest["config"]["ph_max"] == 8.5

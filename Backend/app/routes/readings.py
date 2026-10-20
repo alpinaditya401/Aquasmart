@@ -16,7 +16,8 @@ from flask import Blueprint, g, jsonify, request
 
 from app import db, errors
 from app.auth import device_required, login_required
-from app.models import Alert, Device, SensorReading, ThresholdSetting
+from app.models import (Alert, Device, ReadingRuleVersion, RuleVersion,
+                        SensorReading, ThresholdSetting)
 from app.routes.public import THRESHOLD_RULES_V2
 from app.routes.telemetry import _parse_created_at
 
@@ -143,6 +144,11 @@ def ingest_reading(device_id):
         turbidity=vals["turbidity"], simulation=1 if vals["simulation"] else 0,
         created_at=vals["created_at"], provenance=provenance)
     db.session.add(reading)
+    rule = (RuleVersion.query.filter_by(user_id=device.user_id)
+            .order_by(RuleVersion.id.desc()).first())
+    if rule:
+        db.session.flush()
+        db.session.add(ReadingRuleVersion(reading_id=reading.id, rule_id=rule.id))
     # Bacaan yang datang terlambat tetap disimpan, tetapi tidak menilai ulang
     # alert karena kondisi terkininya sudah dinilai bacaan yang lebih baru.
     if previous is None or vals["created_at"] > previous.created_at:

@@ -162,6 +162,16 @@ class RuleVersion(db.Model):
     created_at = db.Column(db.Text, nullable=False, default=db.func.current_timestamp())
 
 
+class ReadingRuleVersion(db.Model):
+    """The threshold version in force when a reading was stored (SRS data
+    dictionary: reading_rule_versions); rule-versions counts readings with it."""
+    __tablename__ = "reading_rule_versions"
+    reading_id = db.Column(db.Integer, db.ForeignKey("sensor_readings.id"),
+                           primary_key=True)
+    rule_id = db.Column(db.Integer, db.ForeignKey("rule_versions.id"),
+                        nullable=False)
+
+
 class Alert(db.Model):
     __tablename__ = "alerts"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)

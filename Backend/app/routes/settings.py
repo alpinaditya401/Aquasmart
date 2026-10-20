@@ -1,20 +1,25 @@
-"""Threshold milik user: GET/PUT /api/settings/thresholds (FR-025).
+"""Threshold milik user: GET/PUT/PATCH /api/settings/thresholds (FR-025).
 
 Bentuk respons mengikuti skema frontend (ThresholdsResponse):
 { thresholds: {ph_min, ph_max, temperature_min, temperature_max, turbidity_max} }
 
-PUT: session admin + CSRF. Validasi: pH 0–14, min ≤ max untuk tiap
-pasangan, turbidity_max ≥ 0. Setiap perubahan yang valid membuat
-rule_versions baru (version +1, tidak overwrite).
+PUT atau PATCH (frontend memakai PATCH seperti PHP): session admin + CSRF.
+Validasi: pH 0–14, min ≤ max untuk tiap pasangan, turbidity_max ≥ 0. Setiap
+perubahan yang valid membuat rule_versions baru (version +1, tidak overwrite).
+
+GET /api/rule-versions: id berupa SHA-256 dari user, versi, dan konfigurasi
+(skema RuleVersion frontend), reading_count dari reading_rule_versions.
 """
+import hashlib
 import json
 from datetime import datetime, timezone
 
 from flask import Blueprint, g, jsonify, request
+from sqlalchemy import func
 
 from app import db, errors
 from app.auth import csrf_required, login_required
-from app.models import RuleVersion, ThresholdSetting
+from app.models import ReadingRuleVersion, RuleVersion, ThresholdSetting
 from app.routes.public import THRESHOLD_RULES_V2
 
 bp = Blueprint("settings", __name__)
@@ -55,7 +60,7 @@ def _validate(body):
     return vals, None
 
 
-@bp.put("/api/settings/thresholds")
+@bp.route("/api/settings/thresholds", methods=["PUT", "PATCH"])
 @login_required
 @csrf_required
 def put_thresholds():
@@ -94,11 +99,16 @@ def list_rule_versions():
     """Daftar versi rule milik user, terbaru dulu (FR-026)."""
     rows = (RuleVersion.query.filter_by(user_id=g.user.id)
             .order_by(RuleVersion.id.desc()).limit(50).all())
+    counts = dict(db.session.query(ReadingRuleVersion.rule_id, func.count())
+                  .filter(ReadingRuleVersion.rule_id.in_([r.id for r in rows]))
+                  .group_by(ReadingRuleVersion.rule_id).all())
     return jsonify({
         "versions": [{
-            "id": r.id,
+            "id": hashlib.sha256(
+                f"{r.user_id}:{r.version}:{r.config_json}".encode()).hexdigest(),
             "version": r.version,
             "created_at": r.created_at,
+            "reading_count": counts.get(r.id, 0),
             "config": json.loads(r.config_json),
         } for r in rows],
         "note": "Setiap perubahan threshold membuat versi baru; "
