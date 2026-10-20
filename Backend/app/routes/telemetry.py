@@ -15,19 +15,30 @@ Kontrak body (dari TelemetryRepository::ingest PHP, diverifikasi kode):
 
 Respons: 201 ternormalisasi; 409 timestamp duplikat beda nilai;
 422 validasi; 401 key salah. Firmware menganggap 201/409/422 terminal.
+
+GET /api/devices/<id>/telemetry (session, pemilik device) dipakai panel
+diagnostik dashboard: payload mentah dinormalisasi ke bentuk TelemetryRecord
+frontend, terbaru dulu, ?limit=1..100 (default 100).
 """
 import json
 import re
 from datetime import datetime, timezone
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, g, request, jsonify
 from sqlalchemy.exc import IntegrityError
 
 from app import db, errors
-from app.auth import device_required
+from app.auth import device_required, login_required
 from app.models import Device, DeviceTelemetry
 
 bp = Blueprint("telemetry", __name__)
+
+NOTICE = ("PLACEHOLDER SENSOR TANAH, BUKAN pH AIR TERKALIBRASI; turbidity berupa "
+          "mapping sementara, bukan NTU.")
+_ADC_FIELDS = ("turbidity_adc", "soil_ph_adc", "tds_adc")
+_NUMBER_FIELDS = ("temperature", "turbidity_mv", "turbidity_sensor_mv",
+                  "turbidity_mapping_percent", "soil_ph_mv", "tds_mv",
+                  "water_distance_cm", "tank_height_cm")
 
 # Same pattern as the PHP backend; fullmatch because "$" in re.match would
 # still accept a trailing newline.
@@ -156,6 +167,64 @@ def ingest(device_id):
         "provenance": clean["provenance"],
         "source": clean["source"],
     }), 201
+
+
+def _number(value):
+    return (value if isinstance(value, (int, float)) and not isinstance(value, bool)
+            else None)
+
+
+def _tds_estimate(mv):
+    # DFRobot SEN0244 curve at an assumed 25 C, uncalibrated: the same formula
+    # and rounding as the PHP backend and the firmware LCD.
+    v = mv / 1000
+    return round((133.42 * v ** 3 - 255.86 * v ** 2 + 857.39 * v) * 0.5, 1)
+
+
+def _record(row):
+    # The payload is stored as the device sent it, so derived values are
+    # computed here and fields of the wrong type read as null.
+    p = json.loads(row.payload)
+    rec = {f: _number(p.get(f)) for f in _NUMBER_FIELDS}
+    rec.update({f: p.get(f) if isinstance(p.get(f), int)
+                and not isinstance(p.get(f), bool) else None for f in _ADC_FIELDS})
+    tds_mv, distance, tank = rec["tds_mv"], rec["water_distance_cm"], rec["tank_height_cm"]
+    status = p.get("temperature_status")
+    rec.update({
+        "created_at": row.created_at,
+        "received_at": row.received_at,
+        "provenance": row.provenance,
+        "simulation": bool(row.simulation),
+        "source_session": row.source_session,
+        "temperature_status": status if status in _TEMP_STATUS else "unverified",
+        "tds_ppm_estimate": None if tds_mv is None else _tds_estimate(tds_mv),
+        "water_level_percent": (
+            None if distance is None or not tank
+            else round(max(0.0, min(100.0, (tank - distance) / tank * 100)), 1)),
+        "water_level_reference_confirmed": p.get("water_level_reference_confirmed") is True,
+        "water_probes_immersed": p.get("water_probes_immersed") is True,
+        "ph_sensor": "soil_placeholder",
+        "calibrated": p.get("calibrated") is True,
+    })
+    return rec
+
+
+@bp.get("/api/devices/<device_id>/telemetry")
+@login_required
+def recent_telemetry(device_id):
+    device = Device.query.filter_by(id=device_id, user_id=g.user.id).first()
+    if not device:
+        return errors.not_found("Device tidak dikenal.")
+    try:
+        limit = int(request.args.get("limit", 100))
+    except ValueError:
+        limit = 0
+    if not 1 <= limit <= 100:
+        return errors.unprocessable("Limit telemetri harus 1 sampai 100.")
+    rows = (DeviceTelemetry.query.filter_by(device_id=device_id)
+            .order_by(DeviceTelemetry.created_at.desc())
+            .limit(limit).all())
+    return jsonify({"telemetry": [_record(r) for r in rows], "notice": NOTICE}), 200
 
 
 @bp.post("/api/devices/<device_id>/heartbeat")
