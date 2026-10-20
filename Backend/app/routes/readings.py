@@ -47,11 +47,13 @@ def readings(device_id):
         limit = max(1, min(100, int(request.args.get("limit", 50))))
     except ValueError:
         return errors.unprocessable("limit harus 1–100.")
+    # The newest `limit` readings, returned oldest first for the chart (PHP does
+    # the same); ordering ascending before the limit returned the oldest ones.
     rows = (SensorReading.query
             .filter_by(device_id=device_id)
-            .order_by(SensorReading.created_at.asc())
+            .order_by(SensorReading.created_at.desc(), SensorReading.id.desc())
             .limit(limit).all())
-    return jsonify({"readings": [_reading_dict(r) for r in rows]}), 200
+    return jsonify({"readings": [_reading_dict(r) for r in reversed(rows)]}), 200
 
 
 def _validate(body):

@@ -309,3 +309,13 @@ def test_logout_membalas_logged_out(client):
     r = client.post("/api/auth/logout")
     assert r.status_code == 200 and r.json == {"logged_out": True}
     assert client.get("/api/auth/me").status_code == 401
+
+
+# --- frontend: grafik dashboard ---
+def test_readings_ambil_yang_terbaru_urut_naik(client):
+    for minute in range(4):
+        _post_reading(client, created_at=f"2026-10-20T02:0{minute}:00Z")
+    _login(client)
+    rows = client.get(f"/api/devices/{DEVICE}/readings?limit=2").json["readings"]
+    # The dashboard asks for limit=18 and labels the chart "pembacaan terbaru".
+    assert [r["time"] for r in rows] == ["2026-10-20T02:02:00Z", "2026-10-20T02:03:00Z"]
