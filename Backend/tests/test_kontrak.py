@@ -398,3 +398,51 @@ def test_terbitkan_key_lewat_post_key(client):
     fresh = client.post(f"/api/devices/{DEVICE}/telemetry", json=_telemetry(),
                         headers={"X-Device-Key": r.json["device_key"]})
     assert fresh.status_code == 201
+
+
+# --- frontend: observasi pertumbuhan (halaman Laporan) ---
+OBSERVATION_KEYS = {"id", "user_id", "device_id", "observed_at", "weight_g",
+                    "length_cm", "notes", "created_at", "provenance", "source_session"}
+OBSERVATION = {"device_id": DEVICE, "observed_at": "2026-10-19", "weight_g": 120.5,
+               "length_cm": None, "notes": ""}
+
+
+def test_observasi_pertumbuhan_seperti_frontend(client):
+    h = _login(client)
+    r = client.post("/api/growth-observations", json=OBSERVATION, headers=h)
+    assert r.status_code == 201, r.json
+    obs = r.json["observation"]
+    assert OBSERVATION_KEYS <= obs.keys() and obs["provenance"] == "manual"
+    assert UTC.match(obs["created_at"])
+    listed = client.get("/api/growth-observations").json["observations"]
+    assert [o["id"] for o in listed] == [obs["id"]]
+    r = client.delete(f"/api/growth-observations/{obs['id']}", headers=h)
+    assert r.status_code == 200 and r.json == {"deleted": True}
+    assert client.get("/api/growth-observations").json["observations"] == []
+    assert client.delete(f"/api/growth-observations/{obs['id']}",
+                         headers=h).status_code == 404
+
+
+@pytest.mark.parametrize("change,status", [
+    ({"weight_g": 0}, 422), ({"length_cm": -1}, 422), ({"observed_at": "2999-01-01"}, 422),
+    ({"weight_g": None}, 422), ({"device_id": "AQS-LAIN"}, 404)])
+def test_observasi_pertumbuhan_ditolak(client, change, status):
+    # weight_g/length_cm 0 would be stored and then rejected by the frontend
+    # Observation schema (positive), taking the Laporan page down.
+    h = _login(client)
+    r = client.post("/api/growth-observations", json={**OBSERVATION, **change}, headers=h)
+    assert r.status_code == status, r.json
+
+
+def test_observasi_pertumbuhan_milik_orang_lain_tidak_bisa_dihapus(client):
+    h = _login(client)
+    oid = client.post("/api/growth-observations", json=OBSERVATION,
+                      headers=h).json["observation"]["id"]
+    with client.application.app_context():
+        pw = bcrypt.hashpw(b"rahasia123", bcrypt.gensalt()).decode()
+        db.session.add(User(username="b@t", contact="b@t", name="B", password_hash=pw))
+        db.session.commit()
+    r = client.post("/api/auth/login", json={"username": "b@t", "password": "rahasia123"})
+    hb = {"X-CSRF-Token": r.json["csrf_token"]}
+    assert client.delete(f"/api/growth-observations/{oid}", headers=hb).status_code == 404
+    assert client.get("/api/growth-observations").json["observations"] == []

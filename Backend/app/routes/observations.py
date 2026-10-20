@@ -1,9 +1,15 @@
-"""Observasi pertumbuhan manual (FR-027): GET + POST /api/devices/<id>/observations.
+"""Observasi pertumbuhan manual (FR-027).
 
-POST (session + CSRF): {observed_at YYYY-MM-DD ≤ hari ini, weight_g?,
-length_cm?, notes? ≤2000} — minimal satu dari weight_g/length_cm/notes.
+- GET  /api/growth-observations          → 200 terbaru milik user (frontend, PHP)
+- POST /api/growth-observations          → admin + CSRF, body memuat device_id
+- DELETE /api/growth-observations/<id>   → admin + CSRF, {deleted: true}
+- GET + POST /api/devices/<id>/observations (jalur lama per device)
+
+POST: {observed_at YYYY-MM-DD ≤ hari ini (UTC), weight_g?, length_cm? (> 0),
+notes? ≤2000} — minimal satu dari weight_g/length_cm/notes.
 """
-from datetime import date, datetime, timezone
+import math
+from datetime import datetime, timezone
 
 from flask import Blueprint, g, jsonify, request
 
@@ -34,30 +40,28 @@ def list_observations(device_id):
     return jsonify({"observations": [o.to_dict() for o in rows]}), 200
 
 
-@bp.post("/api/devices/<device_id>/observations")
-@login_required
-@csrf_required
-def create_observation(device_id):
-    device, err = _owned_device(device_id)
-    if err:
-        return err
-    body = request.get_json(silent=True) or {}
+def _create(device, body):
     observed_at = body.get("observed_at", "")
     try:
         obs_date = datetime.strptime(observed_at, "%Y-%m-%d").date()
     except (ValueError, TypeError):
         return errors.unprocessable("observed_at harus format YYYY-MM-DD.")
-    if obs_date > date.today():
+    if obs_date > datetime.now(timezone.utc).date():
         return errors.unprocessable(
-            "observed_at tidak boleh tanggal masa depan.")
+            "observed_at tidak boleh tanggal masa depan (UTC).")
     weight_g = body.get("weight_g")
     length_cm = body.get("length_cm")
-    notes = (body.get("notes") or "").strip()
+    notes = body.get("notes") or ""
+    if not isinstance(notes, str):
+        return errors.unprocessable("notes harus teks.")
+    notes = notes.strip()
+    # The frontend Observation schema requires positive sizes, so a stored 0
+    # would make the observation list unreadable.
     for label, v in (("weight_g", weight_g), ("length_cm", length_cm)):
         if v is not None and (
                 isinstance(v, bool) or not isinstance(v, (int, float))
-                or v < 0):
-            return errors.unprocessable(f"{label} harus angka ≥ 0.")
+                or not math.isfinite(v) or v <= 0):
+            return errors.unprocessable(f"{label} harus angka lebih dari 0.")
     if len(notes) > 2000:
         return errors.unprocessable("notes maksimal 2000 karakter.")
     if weight_g is None and length_cm is None and not notes:
@@ -72,3 +76,52 @@ def create_observation(device_id):
     db.session.add(ob)
     db.session.commit()
     return jsonify({"observation": ob.to_dict()}), 201
+
+
+@bp.post("/api/devices/<device_id>/observations")
+@login_required
+@csrf_required
+def create_observation(device_id):
+    device, err = _owned_device(device_id)
+    if err:
+        return err
+    return _create(device, request.get_json(silent=True) or {})
+
+
+@bp.get("/api/growth-observations")
+@login_required
+def list_growth_observations():
+    rows = (GrowthObservation.query.filter_by(user_id=g.user.id)
+            .order_by(GrowthObservation.observed_at.desc(),
+                      GrowthObservation.id.desc())
+            .limit(200).all())
+    return jsonify({"observations": [o.to_dict() for o in rows]}), 200
+
+
+@bp.post("/api/growth-observations")
+@login_required
+@csrf_required
+def create_growth_observation():
+    if g.user.role != "admin":
+        return errors.forbidden("Hanya admin yang boleh mencatat observasi.")
+    body = request.get_json(silent=True) or {}
+    device = Device.query.filter_by(id=body.get("device_id"),
+                                    user_id=g.user.id).first()
+    if not device:
+        return errors.not_found("Perangkat tidak ditemukan.")
+    return _create(device, body)
+
+
+@bp.delete("/api/growth-observations/<int:observation_id>")
+@login_required
+@csrf_required
+def delete_growth_observation(observation_id):
+    if g.user.role != "admin":
+        return errors.forbidden("Hanya admin yang boleh menghapus observasi.")
+    ob = GrowthObservation.query.filter_by(id=observation_id,
+                                           user_id=g.user.id).first()
+    if not ob:
+        return errors.not_found("Observasi tidak ditemukan.")
+    db.session.delete(ob)
+    db.session.commit()
+    return jsonify({"deleted": True}), 200
