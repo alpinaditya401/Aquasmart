@@ -41,7 +41,10 @@ def test_expire_commands_cli(app_):
     assert res.exit_code == 0, res.output
     assert "expired=1" in res.output
     with app_.app_context():
-        assert db.session.get(ActuatorCommand, "o" * 32).status == "expired"
+        # "timeout" is the terminal status in the SRS data dictionary, the PHP
+        # backend and the frontend schema; "expired" is in none of them.
+        old = db.session.get(ActuatorCommand, "o" * 32)
+        assert old.status == "timeout" and old.completed_at is not None
         assert db.session.get(ActuatorCommand, "n" * 32).status == "pending"
 
 
@@ -76,6 +79,25 @@ def test_rate_limit_fallback_memory():
         os.environ.pop("REDIS_URL", None)
         lim = build_limiter()
     assert lim._storage_uri == "memory://"
+
+
+def test_sqlite_folder_dibuat_bila_belum_ada(tmp_path):
+    from config import Config
+    path = tmp_path / "instance" / "aquasmart.sqlite"
+    with mock.patch.object(Config, "SQLALCHEMY_DATABASE_URI",
+                           "sqlite:///" + str(path)):
+        app = create_app("default")
+    with app.app_context():
+        db.create_all()
+        db.engine.dispose()
+    assert path.exists()
+
+
+def test_database_url_postgres_memakai_psycopg2():
+    from config import normalize_db_url
+    for url in ("postgres://u:p@db:5432/a", "postgresql://u:p@db:5432/a"):
+        assert normalize_db_url(url) == "postgresql+psycopg2://u:p@db:5432/a"
+    assert normalize_db_url("sqlite:///x.sqlite") == "sqlite:///x.sqlite"
 
 
 def test_healthz():

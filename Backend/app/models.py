@@ -5,6 +5,19 @@ demo.sqlite / database production lama bisa dipakai langsung.
 """
 from app import db
 
+# Display labels from the PHP backend's Provenance::label(); the frontend shows
+# them as the alert's source.
+PROVENANCE_LABELS = {
+    "simulation": "SIMULASI",
+    "device": "DEVICE / kalibrasi belum diverifikasi",
+    "manual": "MANUAL",
+    "seed": "SEED / data contoh",
+}
+
+
+def provenance_label(provenance):
+    return PROVENANCE_LABELS.get(provenance, "LEGACY / UNVERIFIED")
+
 
 class User(db.Model):
     __tablename__ = "users"
@@ -109,16 +122,24 @@ class ActuatorCommand(db.Model):
     TERMINAL = ("succeeded", "failed", "timeout")
 
     def to_dict(self):
+        # The firmware ignores a command whose simulation is not the boolean
+        # false, and the frontend Command schema needs every field below.
         return {
             "id": self.id,
             "device_id": self.device_id,
+            "user_id": self.user_id,
             "actuator": self.actuator,
             "value": bool(self.value),
             "duration": self.duration,
             "request_id": self.request_id,
             "status": self.status,
+            "simulation": bool(self.simulation),
             "created_at": self.created_at,
             "expires_at": self.expires_at,
+            "delivered_at": self.delivered_at,
+            "completed_at": self.completed_at,
+            "provenance": self.provenance,
+            "source_session": self.source_session,
         }
 
 
@@ -141,6 +162,16 @@ class RuleVersion(db.Model):
     created_at = db.Column(db.Text, nullable=False, default=db.func.current_timestamp())
 
 
+class ReadingRuleVersion(db.Model):
+    """The threshold version in force when a reading was stored (SRS data
+    dictionary: reading_rule_versions); rule-versions counts readings with it."""
+    __tablename__ = "reading_rule_versions"
+    reading_id = db.Column(db.Integer, db.ForeignKey("sensor_readings.id"),
+                           primary_key=True)
+    rule_id = db.Column(db.Integer, db.ForeignKey("rule_versions.id"),
+                        nullable=False)
+
+
 class Alert(db.Model):
     __tablename__ = "alerts"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -160,6 +191,7 @@ class Alert(db.Model):
             "device_id": self.device_id,
             "severity": self.severity,
             "message": self.message,
+            "source": provenance_label(self.provenance),
             "acknowledged": bool(self.acknowledged),
             "created_at": self.created_at,
             "acknowledged_at": self.acknowledged_at,

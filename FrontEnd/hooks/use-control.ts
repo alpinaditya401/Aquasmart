@@ -4,9 +4,9 @@ import { apiRequest, authedRequest, devicePath } from "@/lib/api/client"
 import * as S from "@/lib/api/schemas"
 import { deviceKeys } from "./use-devices"
 
-// Commands through /control are simulated (API.md: simulation=true, no GPIO, relay
-// or motor). A succeeded status means the simulator acknowledged it, not that
-// anything physically moved.
+// Commands through /control go to the ESP32 (backend API.md: simulation=false). A
+// succeeded status means the firmware reported switching its output, not that anything
+// physically moved.
 
 const commandKeys = {
   all: ["commands"] as const,

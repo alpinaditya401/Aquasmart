@@ -1,12 +1,15 @@
 """Manajemen device: claim, rename, rotasi key (FR-009, FR-010, FR-011).
 
-- POST /api/devices/claim — session + CSRF. Body {serial_number}
+Path tanpa /claim dan /rotate adalah yang dipanggil frontend (sama dengan PHP);
+path lama tetap diterima.
+
+- POST /api/devices[/claim] — session + CSRF. Body {serial_number}
   (alias {serial} diterima). Serial dinormalisasi uppercase, harus ada di
   device_inventory dan belum diklaim. Unit produk butuh kode aktivasi
   (422, alur terpisah).
 - PATCH /api/devices/<id> — session + CSRF. {name 1-100, location 1-150}.
   404 bila device tidak ada; 403 bila bukan milik user.
-- POST /api/devices/<id>/key/rotate — session admin + CSRF. Key baru
+- POST /api/devices/<id>/key[/rotate] — session admin + CSRF. Key baru
   (token_urlsafe 32) ditampilkan SEKALI; yang disimpan hanya SHA-256.
 """
 import hashlib
@@ -38,6 +41,7 @@ def _owned_device(device_id):
     return device, None
 
 
+@bp.post("/api/devices")
 @bp.post("/api/devices/claim")
 @login_required
 @csrf_required
@@ -85,6 +89,7 @@ def rename(device_id):
     return jsonify({"updated": True}), 200
 
 
+@bp.post("/api/devices/<device_id>/key")
 @bp.post("/api/devices/<device_id>/key/rotate")
 @login_required
 @csrf_required

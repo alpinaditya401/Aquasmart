@@ -1,0 +1,53 @@
+# Backend + Postgres + Redis untuk uji lokal. Dari folder Backend/:
+#   copy .env.example .env   (lalu isi SECRET_KEY dan POSTGRES_PASSWORD)
+#   docker compose up --build
+# API: http://localhost:8080  (cek: http://localhost:8080/healthz)
+
+services:
+  backend:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      FLASK_CONFIG: production
+      SECRET_KEY: ${SECRET_KEY:?isi SECRET_KEY di .env}
+      DATABASE_URL: postgresql://aquasmart:${POSTGRES_PASSWORD:?isi POSTGRES_PASSWORD di .env}@db:5432/aquasmart
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      SCHEDULER_ENABLED: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Postgres dan Redis tidak membuka port ke host; hanya backend yang
+  # menjangkaunya lewat jaringan internal compose.
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: aquasmart
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?isi POSTGRES_PASSWORD di .env}
+      POSTGRES_DB: aquasmart
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aquasmart -d aquasmart"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # Penyimpanan rate limit bersama untuk kedua worker gunicorn.
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pgdata:

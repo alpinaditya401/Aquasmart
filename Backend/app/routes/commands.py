@@ -54,5 +54,11 @@ def ack(device_id, command_id):
         return errors.conflict("Command belum delivered atau sudah terminal.")
     cmd.status = status
     cmd.completed_at = int(time.time())
+    # The dashboard toggle shows devices.aerator, so it changes only once the
+    # firmware reports the relay was switched.
+    if status == "succeeded" and cmd.actuator == "aerator":
+        device = db.session.get(Device, device_id)
+        if device:
+            device.aerator = cmd.value
     db.session.commit()
     return jsonify({"ok": True, "id": cmd.id, "status": cmd.status}), 200

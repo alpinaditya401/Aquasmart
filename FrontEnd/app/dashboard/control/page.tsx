@@ -2,8 +2,8 @@ import Link from "next/link"
 import { AutoRefresh } from "@/components/auto-refresh"
 import { ActuatorToggle } from "@/components/control/actuator-toggle"
 import { CommandTable, STATUS_LABEL } from "@/components/control/command-table"
+import { ControlNotice } from "@/components/control/control-notice"
 import { FeedNowForm } from "@/components/control/feed-now-form"
-import { SimulationNotice } from "@/components/control/simulation-notice"
 import { NoDevice } from "@/components/dashboard/no-device"
 import { DevicePicker } from "@/components/device-picker"
 import { heading, inlineLink, panel } from "@/components/ui/styles"
@@ -59,7 +59,7 @@ export default async function ControlPage({
         <DevicePicker devices={devices} selectedId={device.id} basePath="/dashboard/control" />
       </header>
 
-      <SimulationNotice />
+      <ControlNotice />
 
       {isAdmin ? null : (
         <p className={`${panel()} text-sm text-ink`}>
@@ -113,7 +113,7 @@ export default async function ControlPage({
             <div className="space-y-1">
               <h3 className={heading({ level: "panel", tone: "ink" })}>Mode otomatis</h3>
               <p className="text-sm text-muted">
-                Saat menyala, jadwal pakan yang aktif dijalankan scheduler simulator.
+                Status ini disimpan server. Backend belum menjalankan jadwal pakan secara otomatis.
               </p>
             </div>
             <State on={device.auto} />
@@ -140,8 +140,8 @@ export default async function ControlPage({
             Riwayat perintah
           </h2>
           <p className="text-sm text-muted">
-            Antre: menunggu diambil. Terkirim: sudah diambil simulator. Berhasil atau Gagal: jawaban
-            simulator. Tanpa balasan: tidak ada jawaban sebelum batas waktu.
+            Antre: menunggu diambil perangkat. Terkirim: sudah diambil ESP32. Berhasil atau Gagal:
+            laporan firmware. Tanpa balasan: tidak ada laporan sebelum batas waktu.
           </p>
         </div>
         {commands.length === 0 ? (
