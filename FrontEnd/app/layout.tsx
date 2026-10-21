@@ -5,7 +5,7 @@ import "./globals.css"
 export const metadata: Metadata = {
   title: "AquaSmart AIoT",
   description:
-    "Pemantauan kualitas air akuakultur: pH, suhu, dan kekeruhan. Kontrol perangkat masih simulasi.",
+    "Pemantauan kualitas air akuakultur: pH, suhu, dan kekeruhan. Aktuasi perangkat belum terbukti di alat fisik.",
   keywords: ["akuakultur", "IoT", "kualitas air", "pemantauan"],
   authors: [{ name: "Alpin Aditya Pratama" }, { name: "Dimas Aryo Sejati" }],
 }

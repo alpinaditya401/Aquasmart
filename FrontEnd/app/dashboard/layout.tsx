@@ -52,7 +52,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <span>
             Ruang budidaya <CurrentPage />
           </span>
-          <span>Kontrol aktuator: SIMULASI</span>
+          <span>Aktuasi fisik: belum terbukti</span>
         </div>
         <div className="mx-auto max-w-content">{children}</div>
       </main>

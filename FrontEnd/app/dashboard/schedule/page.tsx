@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { SimulationNotice } from "@/components/control/simulation-notice"
+import { ControlNotice } from "@/components/control/control-notice"
 import { NoDevice } from "@/components/dashboard/no-device"
 import { DevicePicker } from "@/components/device-picker"
 import { DeleteScheduleButton } from "@/components/schedule/delete-schedule-button"
@@ -34,12 +34,13 @@ export default async function SchedulePage({
         <p className="text-sm text-muted">{device.location}</p>
         <h1 className={heading()}>Jadwal Pakan: {device.name}</h1>
         <p className="text-sm text-ink">
-          Jam dalam WIB. Hasil setiap jadwal tercatat di riwayat perintah halaman Kontrol.
+          Jam dalam WIB. Jadwal disimpan server, tetapi backend belum mengubahnya menjadi perintah
+          pakan otomatis.
         </p>
         <DevicePicker devices={devices} selectedId={device.id} basePath="/dashboard/schedule" />
       </header>
 
-      <SimulationNotice />
+      <ControlNotice />
 
       <section aria-labelledby="mode" className={panel()}>
         <h2 id="mode" className={heading({ level: "sub", tone: "ink" })}>
@@ -47,8 +48,8 @@ export default async function SchedulePage({
         </h2>
         <p className="mt-1 text-sm text-ink">
           {device.auto
-            ? "Jadwal aktif di bawah dijalankan scheduler simulator pada jamnya."
-            : "Jadwal tetap tersimpan, tetapi tidak dijalankan sampai Mode otomatis dinyalakan."}
+            ? "Mode otomatis tercatat menyala, tetapi backend belum menjalankan jadwal di bawah. Pakan tetap diberikan dari halaman Kontrol."
+            : "Jadwal tetap tersimpan. Backend belum menjalankan jadwal secara otomatis, juga saat Mode otomatis dinyalakan."}
         </p>
         <Link href={`/dashboard/control${query}`} className={`mt-2 ${inlineLink}`}>
           {device.auto ? "Buka halaman Kontrol" : "Nyalakan di halaman Kontrol"}

@@ -55,8 +55,8 @@ export function ExportLinks({ query }: { query: ReportQuery }) {
       <p className="text-sm text-muted">
         Unduhan memakai filter yang sedang aktif di atas. CSV turun sebagai berkas, JSON terbuka di
         tab browser. Server menolak ekspor yang melebihi 10.000 baris dan meminta periode yang lebih
-        pendek. Ekspor perintah aktuator dan perintah pakan berisi perintah simulasi beserta
-        statusnya, bukan bukti bahwa alat fisik bergerak.
+        pendek. Ekspor perintah aktuator dan perintah pakan berisi perintah beserta status laporan
+        firmware, bukan bukti bahwa alat fisik bergerak.
       </p>
     </>
   )

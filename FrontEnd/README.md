@@ -46,8 +46,10 @@ di luar repo ini.
   Vercel, sehingga batas login (30 per menit) dan register (10 per menit) berlaku
   untuk semua pengguna bersama, bukan per pengguna. Perbaikannya ada di backend dan
   belum dikerjakan karena backend dibekukan.
-- **Kontrol aerator dan feeder adalah SIMULASI.** Perintah tercatat di server, tetapi
-  aktuasi fisik lewat ESP32 belum diverifikasi.
+- **Aktuasi aerator dan feeder belum terbukti di perangkat fisik.** Dengan backend Flask,
+  perintah dari halaman Kontrol diteruskan ke ESP32 (`simulation: false`), dan firmware hanya
+  menjalankannya bila feeder atau relay diaktifkan di konfigurasinya. Jadwal pakan disimpan,
+  tetapi belum dijalankan otomatis oleh backend.
 - **TDS dan level air adalah estimasi.** Server menghitungnya dari nilai mentah ESP32 (kurva
   DFRobot SEN0244 pada asumsi 25°C, dan jarak ultrasonik terhadap tinggi tandon); keduanya belum
   terkalibrasi dan tidak dipakai menilai batas kualitas air. Status firmware ada di

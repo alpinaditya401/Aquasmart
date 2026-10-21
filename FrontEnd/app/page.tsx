@@ -32,7 +32,7 @@ const CAPABILITIES = [
   {
     icon: CalendarClock,
     title: "Susun jadwal pakan",
-    body: "Atur hari dan durasi pemberian pakan per perangkat. Kontrol aktuator masih berupa simulasi.",
+    body: "Catat hari, jam, dan durasi pemberian pakan per perangkat. Jadwal belum dijalankan otomatis.",
   },
   {
     icon: ChartNoAxesCombined,
@@ -184,10 +184,9 @@ export default async function Home() {
           <span className="eyebrow">Status pengembangan</span>
           <h2>Terbuka tentang apa yang sudah berjalan.</h2>
           <p>
-            Pemantauan dan pencatatan tersedia. Kontrol aerator dan feeder masih{" "}
-            <strong>SIMULASI</strong>: firmware ESP32 belum diuji di perangkat fisik, jadi
-            aktuasinya belum terverifikasi. Sensor belum terkalibrasi, dan data contoh selalu diberi
-            penanda.
+            Pemantauan dan pencatatan tersedia. Perintah aerator dan feeder dikirim ke ESP32, tetapi{" "}
+            <strong>aktuasinya belum terbukti</strong> di perangkat fisik, dan jadwal pakan belum
+            dijalankan otomatis. Sensor belum terkalibrasi, dan data contoh selalu diberi penanda.
           </p>
           <Link href={session ? "/dashboard" : "/login"} className="text-action">
             Masuk ke ruang budidaya

@@ -88,7 +88,7 @@ Halaman editorial (beranda, masuk, daftar, jelajah 3D) memakai ukuran piksel sen
 | `heading` | `level`: page, section, panel, sub; `tone`: deep, ink, warning, danger | |
 | `button` | `tone`: primary, secondary, danger; `size`: md, compact | Keduanya `min-h-11` (44px). `compact` hanya memangkas padding horizontal |
 | `control` | `font`: body, data | Input, select, dan textarea. Batas pakai `muted`, bukan `foam-line` |
-| `panel` | `tone`: plain, notice | `notice` dipakai pemberitahuan SIMULASI |
+| `panel` | `tone`: plain, notice | `notice` dipakai pemberitahuan status aktuasi (`ControlNotice`) |
 | `statusText` | `tone`: neutral, ok, warning, danger, idle | Satu sumber warna status |
 | `inlineLink` | tanpa varian | Tautan setinggi 44px yang berdiri sendiri di dalam blok |
 | `brandLink` | tanpa varian | Wordmark di header ponsel dashboard, setinggi 44px |
