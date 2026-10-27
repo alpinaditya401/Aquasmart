@@ -15,6 +15,10 @@ app = create_app(os.environ.get("FLASK_CONFIG", "default"))
 with app.app_context():
     db.create_all()
     ensure_columns(db)
+    # gunicorn --preload runs this module once and then forks the workers.
+    # A pooled Postgres connection left open here would be shared by every
+    # worker, and psycopg2 breaks with "PGRES_TUPLES_OK and no message".
+    db.engine.dispose()
 
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=8080)

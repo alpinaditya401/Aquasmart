@@ -100,6 +100,19 @@ def test_database_url_postgres_memakai_psycopg2():
     assert normalize_db_url("sqlite:///x.sqlite") == "sqlite:///x.sqlite"
 
 
+def test_wsgi_tidak_mewariskan_koneksi_ke_worker(tmp_path):
+    import subprocess
+    import sys
+    app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    code = ("import wsgi; from app import db\n"
+            "with wsgi.app.app_context(): print(db.engine.pool.checkedin())")
+    env = {**os.environ, "DATABASE_URL": "sqlite:///" + str(tmp_path / "a.sqlite")}
+    env.pop("FLASK_CONFIG", None)
+    out = subprocess.run([sys.executable, "-c", code], cwd=app_dir, env=env,
+                         capture_output=True, text=True, check=True)
+    assert out.stdout.strip().splitlines()[-1] == "0"
+
+
 def test_healthz():
     from app import create_app
     app = create_app("testing")
