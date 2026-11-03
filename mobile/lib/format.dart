@@ -40,13 +40,18 @@ String formatAngka(double v) =>
     v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
 
 /// Where a reading came from, worded like the web dashboard's labels.
-String labelSumber(Reading r) {
-  if (r.simulation || r.provenance == 'simulation') return 'SIMULASI';
-  if (r.provenance == 'device') {
-    return 'Perangkat, kalibrasi belum diverifikasi';
-  }
-  return 'Data lama, belum diverifikasi';
-}
+String labelSumber(Reading r) =>
+    r.simulation ? 'SIMULASI' : labelProvenance(r.provenance);
+
+String labelProvenance(String provenance) => switch (provenance) {
+  'simulation' => 'SIMULASI',
+  'device' => 'Perangkat, kalibrasi belum diverifikasi',
+  'seed' => 'Data contoh',
+  'manual' => 'Input manual',
+  _ => 'Data lama, belum diverifikasi',
+};
+
+String labelKoneksi(bool online) => online ? 'Terhubung' : 'Terputus';
 
 enum Kondisi { aman, diLuarBatas }
 

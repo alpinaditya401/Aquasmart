@@ -1,13 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- Cleartext is allowed because AquaSmart is meant to run on a farmer's own
-         computer on the local network (backend README), reached over plain HTTP.
-         An HTTPS server address works the same way. -->
+    <!-- No cleartext here: the login password and session cookie would cross
+         shared Wi-Fi unencrypted. Only src/debug allows plain HTTP. -->
     <application
         android:label="AquaSmart"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
+        android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
             android:exported="true"

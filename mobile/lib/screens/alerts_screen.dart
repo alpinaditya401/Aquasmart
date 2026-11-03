@@ -9,11 +9,16 @@ class AlertsScreen extends StatefulWidget {
   const AlertsScreen({
     super.key,
     required this.api,
+    required this.pondNames,
     required this.onCount,
     required this.onSessionLost,
   });
 
   final ApiClient api;
+
+  /// Device serial to pond name, from the ponds tab; the serial is shown
+  /// until that list has loaded.
+  final Map<String, String> pondNames;
   final ValueChanged<int> onCount;
   final VoidCallback onSessionLost;
 
@@ -95,6 +100,9 @@ class AlertsScreenState extends State<AlertsScreen> {
             separatorBuilder: (_, _) => const SizedBox(height: 10),
             itemBuilder: (context, i) {
               final a = alerts[i];
+              final meta = Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: Palette.muted);
               return Card(
                 color: a.acknowledged ? Palette.foam : Palette.surfaceWhite,
                 child: Padding(
@@ -106,17 +114,14 @@ class AlertsScreenState extends State<AlertsScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              '${a.deviceId} · ${formatIso(a.createdAt)}',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Palette.muted,
-                              ),
+                              '${widget.pondNames[a.deviceId] ?? a.deviceId} · '
+                              '${formatIso(a.createdAt)}',
+                              style: meta,
                             ),
                           ),
                           Text(
                             a.acknowledged ? 'Sudah dibaca' : 'Belum dibaca',
-                            style: TextStyle(
-                              fontSize: 12,
+                            style: meta?.copyWith(
                               fontWeight: FontWeight.w600,
                               color: a.acknowledged
                                   ? Palette.muted
@@ -127,14 +132,13 @@ class AlertsScreenState extends State<AlertsScreen> {
                       ),
                       const SizedBox(height: 6),
                       Text(a.message, style: const TextStyle(height: 1.4)),
-                      if (a.source.isNotEmpty) ...[
+                      // The raw `source` is an uppercase backend label; the
+                      // reading cards word provenance this way.
+                      if (a.provenance.isNotEmpty) ...[
                         const SizedBox(height: 6),
                         Text(
-                          'Sumber: ${a.source}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Palette.muted,
-                          ),
+                          'Sumber: ${labelProvenance(a.provenance)}',
+                          style: meta,
                         ),
                       ],
                       if (!a.acknowledged) ...[

@@ -6,7 +6,7 @@ mobile. Yang ada di aplikasi:
 | Layar | Isi | Endpoint backend |
 | --- | --- | --- |
 | Masuk | Login dengan email atau nomor HP | `POST /api/auth/login` |
-| Kolam | Daftar perangkat, status online, bacaan terakhir dibanding batas aman | `GET /api/devices`, `GET /api/settings/thresholds` |
+| Kolam | Daftar perangkat, status Terhubung/Terputus dari backend, bacaan terakhir dibanding batas aman | `GET /api/devices`, `GET /api/settings/thresholds` |
 | Detail kolam | Bacaan terakhir, grafik pH, suhu, atau kekeruhan dari 50 bacaan terakhir | `GET /api/devices/{id}/readings` |
 | Kontrol | Aerator nyala/mati, beri pakan 1-10 detik, mode otomatis, 5 perintah terakhir | `POST /api/devices/{id}/control`, `GET /api/devices/{id}/commands` |
 | Peringatan | Daftar alert, tandai sudah dibaca, badge jumlah belum dibaca | `GET /api/alerts`, `PATCH /api/alerts/{id}/acknowledge` |
@@ -29,24 +29,56 @@ flutter test
 flutter run
 ```
 
-Alamat server ditentukan saat build lewat `AQUASMART_API_URL`. Bawaannya
-`http://10.0.2.2:8080`, yaitu komputer host dilihat dari emulator Android, tempat
-backend berjalan dengan `docker compose up` (lihat `../Backend/README.md`).
+Alamat server ditentukan saat build lewat `--dart-define=API_BASE_URL=...`.
+Tanpa itu, bawaannya:
 
-Untuk HP di jaringan Wi-Fi yang sama dengan komputer backend, ganti dengan IP
-komputer itu:
+| Build | Alamat bawaan | HTTP tanpa TLS |
+| --- | --- | --- |
+| release dan profile | `https://aquasmart.my.id` | ditolak |
+| debug (`flutter run`) | `http://10.0.2.2:8080`, yaitu komputer host dilihat dari emulator Android, tempat backend berjalan dengan `docker compose up` (lihat `../Backend/README.md`) | diizinkan |
+
+Alamat yang tertanam juga tampil di layar Masuk (`Server: ...`). Catat alamat itu
+setiap kali membagikan APK.
+
+APK untuk server produksi:
 
 ```bash
-flutter build apk --release --dart-define=AQUASMART_API_URL=http://192.168.1.10:8080
+flutter build apk --release --dart-define=API_BASE_URL=https://aquasmart.my.id
 ```
 
-HTTP tanpa TLS diizinkan (`usesCleartextTraffic`) karena AquaSmart dirancang
-berjalan di komputer pembudidaya di jaringan lokal. Alamat HTTPS juga bisa dipakai.
+Cleartext HTTP hanya diizinkan di `android/app/src/debug/AndroidManifest.xml`.
+Manifest utama tidak mengizinkannya, karena kata sandi dan cookie sesi akan
+terkirim tanpa enkripsi di Wi-Fi bersama. Untuk mencoba HP terhadap backend di
+laptop pada jaringan Wi-Fi yang sama, pakai build debug dengan IP laptop itu:
 
-APK release saat ini ditandatangani dengan debug key bawaan Flutter. Cukup untuk
-dipasang langsung (sideload), belum untuk Play Store.
+```bash
+flutter build apk --debug --dart-define=API_BASE_URL=http://192.168.1.10:8080
+```
+
+APK release atau profile dengan alamat `http://` tidak mengirim permintaan apa pun:
+`ApiClient` menolaknya dan layar Masuk menampilkan pesan agar memakai `https://`.
+Pemeriksaan ini ada di kode aplikasi karena belum dipastikan apakah Flutter
+menerapkan setelan cleartext manifest pada koneksi `dart:io`. Bila server menjawab
+dengan redirect (misalnya `http://` dialihkan ke `https://`) atau halaman HTML,
+aplikasi menampilkan pesan galat, bukan diam.
+
+APK release saat ini ditandatangani dengan debug key bawaan Flutter
+(`android/app/build.gradle.kts`). Cukup untuk dipasang langsung (sideload), belum
+untuk Play Store, dan pembaruan dari komputer lain harus uninstall dulu. Keystore
+rilis belum dibuat.
 
 Sesi login hanya disimpan di memori. Setelah aplikasi ditutup, pengguna masuk lagi.
+Bila server menjawab 401 di layar mana pun, termasuk detail kolam, aplikasi kembali
+ke layar Masuk.
+
+Detail kolam diperbarui setiap 10 detik hanya selama aplikasi tampil di layar.
+Pembaruan berhenti saat aplikasi di latar belakang atau HP dikunci, lalu langsung
+dimuat ulang saat aplikasi dibuka lagi. Bila satu pembaruan gagal, data terakhir
+tetap tampil dengan keterangan "Pembaruan gagal, data per ...".
+
+Status Terhubung/Terputus diambil apa adanya dari field `online` backend; aplikasi
+tidak menghitungnya sendiri. Perintah yang masih Antre atau Terkirim setelah
+`expires_at` lewat tampil Kedaluwarsa (dihitung dengan jam HP).
 
 ## Keputusan desain
 
@@ -59,6 +91,11 @@ visual instrumen yang tenang, dial ENERGY 1 / RHYTHM 2 / MOTION 1.
   luar batas, sama seperti web. Tema terang saja, mengikuti keputusan web.
 - **Huruf:** font sistem Android. Segoe UI yang dipakai web tidak ada di Android,
   dan font sistem tidak perlu diunduh. Angka bacaan memakai tabular figures agar sejajar.
+  Ukuran huruf diambil dari skala di `buildTheme()` (`headlineSmall` 24, `titleMedium`
+  18, `titleSmall` 16, `bodySmall` 13, `labelSmall` 12), bukan angka per layar.
+  Pengecualian: label sumbu grafik di `reading_chart.dart` masih 11.
+- **Layar pembuka:** latar `foam` di mode terang maupun gelap, karena aplikasi
+  hanya bertema terang.
 - **Fokus layar:** di detail kolam, yang paling besar adalah bacaan terakhir dan
   statusnya, karena keputusan pertama pembudidaya adalah apakah air perlu ditangani.
 - **Kartu:** datar dengan garis `foam-line`, tanpa bayangan, seperti panel dashboard web.
@@ -71,6 +108,23 @@ visual instrumen yang tenang, dial ENERGY 1 / RHYTHM 2 / MOTION 1.
   sama tidak terlihat.
 - **Logo dan ikon peluncur:** digambar ulang dari `../FrontEnd/public/logo.svg`.
   Ikon peluncur memakai latar `deep-current` karena tetes logo berwarna terang.
+
+## Verifikasi perbaikan audit (2 November 2026)
+
+- `flutter analyze`: tidak ada masalah. `flutter test`: 33 test lulus. Test baru
+  (respons non-JSON dan redirect, penolakan `http://` di build release, label
+  sumber, Terhubung/Terputus, nama kolam di peringatan, alert diminta sekali, live
+  region galat, Kedaluwarsa, 401 di detail, data lama tetap tampil saat pembaruan
+  gagal, polling berhenti di latar belakang) dibuktikan menangkap bug: setiap
+  perbaikan dibalik satu per satu di salinan proyek, test yang bersangkutan merah,
+  lalu hijau lagi setelah perbaikan dikembalikan.
+- `flutter build apk --release` tanpa `--dart-define`: `libapp.so` memuat
+  `https://aquasmart.my.id` dan tidak memuat `10.0.2.2`. Manifest release hasil merge
+  tidak memuat `usesCleartextTraffic`; manifest debug hasil merge memuatnya.
+- Belum dicoba di emulator maupun HP fisik: login ke `https://aquasmart.my.id`,
+  layar pembuka di mode gelap, pengumuman TalkBack, berhentinya polling saat HP
+  dikunci, dan pesan penolakan `http://` di APK release. Semua itu baru dibuktikan
+  lewat test widget dan test klien API.
 
 ## Verifikasi (27 Oktober 2026)
 

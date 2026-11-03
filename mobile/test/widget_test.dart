@@ -27,11 +27,11 @@ const _thresholds = {
   },
 };
 
-Map<String, Object?> _device(double ph) => {
+Map<String, Object?> _device(double ph, {bool online = true}) => {
   'id': 'K1',
   'name': 'Kolam Nila',
   'location': 'Belakang rumah',
-  'online': true,
+  'online': online,
   'aerator': false,
   'feeder': false,
   'auto': false,
@@ -47,15 +47,22 @@ Map<String, Object?> _device(double ph) => {
 };
 
 final controlBodies = <Map<String, dynamic>>[];
+final requestPaths = <String>[];
 
 ApiClient _api({
   double ph = 7.1,
+  bool online = true,
   bool loginOk = true,
   int unread = 0,
   List<Object> alerts = const [],
+  List<Object> commands = const [],
+  http.Response? Function(http.Request req)? override,
 }) => ApiClient(
   baseUrl: 'http://srv',
   client: MockClient((req) async {
+    requestPaths.add(req.url.path);
+    final o = override?.call(req);
+    if (o != null) return o;
     switch (req.url.path) {
       case '/api/auth/login':
         return loginOk
@@ -75,7 +82,7 @@ ApiClient _api({
               }, 401);
       case '/api/devices':
         return json({
-          'devices': [_device(ph)],
+          'devices': [_device(ph, online: online)],
         }, 200);
       case '/api/settings/thresholds':
         return json(_thresholds, 200);
@@ -96,7 +103,7 @@ ApiClient _api({
           ],
         }, 200);
       case '/api/devices/K1/commands':
-        return json({'commands': []}, 200);
+        return json({'commands': commands}, 200);
       case '/api/devices/K1/control':
         controlBodies.add(jsonDecode(req.body) as Map<String, dynamic>);
         return json({
@@ -216,4 +223,227 @@ void main() {
     expect(find.text('pH 9.2 di luar ambang 6.5-8.5.'), findsOneWidget);
     expect(find.text('Tandai sudah dibaca'), findsOneWidget);
   });
+
+  testWidgets('status perangkat memakai istilah Terhubung', (t) async {
+    await t.pumpWidget(AquaSmartApp(api: _api()));
+    await _masuk(t);
+    expect(find.text('Terhubung'), findsOneWidget);
+    expect(find.text('Online'), findsNothing);
+  });
+
+  testWidgets('perangkat yang dilaporkan backend offline tampil Terputus', (
+    t,
+  ) async {
+    await t.pumpWidget(AquaSmartApp(api: _api(online: false)));
+    await _masuk(t);
+    expect(find.text('Terputus'), findsOneWidget);
+    expect(find.text('Offline'), findsNothing);
+  });
+
+  testWidgets('muat ulang daftar kolam tidak mengganti isi dengan spinner', (
+    t,
+  ) async {
+    await t.pumpWidget(AquaSmartApp(api: _api()));
+    await _masuk(t);
+    await t.tap(find.byTooltip('Muat ulang'));
+    await t.pump();
+    expect(find.text('Memuat data kolam...'), findsNothing);
+    expect(find.text('Kolam Nila'), findsOneWidget);
+    await t.pumpAndSettle();
+  });
+
+  testWidgets('peringatan hanya diminta sekali saat masuk', (t) async {
+    requestPaths.clear();
+    await t.pumpWidget(AquaSmartApp(api: _api(unread: 2)));
+    await _masuk(t);
+    expect(requestPaths.where((p) => p == '/api/alerts').length, 1);
+    expect(find.text('2'), findsOneWidget);
+  });
+
+  testWidgets('peringatan memakai nama kolam dan label sumber aplikasi', (
+    t,
+  ) async {
+    await t.pumpWidget(
+      AquaSmartApp(
+        api: _api(
+          unread: 1,
+          alerts: [
+            {
+              'id': 1,
+              'device_id': 'K1',
+              'message': 'pH 9.2 di luar ambang.',
+              'source': 'DEVICE / kalibrasi belum diverifikasi',
+              'provenance': 'device',
+              'acknowledged': false,
+              'created_at': '2026-10-27T01:00:00Z',
+            },
+          ],
+        ),
+      ),
+    );
+    await _masuk(t);
+    await t.tap(find.text('Peringatan').last);
+    await t.pumpAndSettle();
+    expect(find.textContaining('Kolam Nila · '), findsOneWidget);
+    expect(find.textContaining('K1 · '), findsNothing);
+    expect(
+      find.text('Sumber: Perangkat, kalibrasi belum diverifikasi'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('DEVICE /'), findsNothing);
+  });
+
+  testWidgets('galat login diumumkan pembaca layar', (t) async {
+    final semantics = t.ensureSemantics();
+    await t.pumpWidget(AquaSmartApp(api: _api(loginOk: false)));
+    await _masuk(t);
+    expect(
+      t.getSemantics(find.byKey(const Key('login-error'))),
+      isSemantics(isLiveRegion: true),
+    );
+    semantics.dispose();
+  });
+
+  testWidgets('balasan server bukan JSON tampil sebagai pesan di layar masuk', (
+    t,
+  ) async {
+    await t.pumpWidget(
+      AquaSmartApp(
+        api: _api(
+          override: (req) => req.url.path == '/api/auth/login'
+              ? http.Response('Redirecting...', 308)
+              : null,
+        ),
+      ),
+    );
+    await _masuk(t);
+    expect(find.byKey(const Key('login-error')), findsOneWidget);
+    expect(find.textContaining('https://'), findsOneWidget);
+  });
+
+  testWidgets('perintah yang lewat expires_at tampil Kedaluwarsa', (t) async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    await _bukaDetail(
+      t,
+      _api(
+        commands: [
+          {
+            'actuator': 'aerator',
+            'value': true,
+            'duration': 0,
+            'status': 'pending',
+            'created_at': now - 900,
+            'expires_at': now - 600,
+          },
+          {
+            'actuator': 'feeder',
+            'value': true,
+            'duration': 3,
+            'status': 'pending',
+            'created_at': now,
+            'expires_at': now + 300,
+          },
+        ],
+      ),
+    );
+    expect(find.text('Kedaluwarsa'), findsOneWidget);
+    expect(find.text('Antre'), findsOneWidget);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('sesi berakhir di detail kolam kembali ke layar masuk', (
+    t,
+  ) async {
+    var habis = false;
+    await _bukaDetail(
+      t,
+      _api(
+        override: (req) => habis && req.url.path != '/api/auth/login'
+            ? json({
+                'error': {
+                  'code': 'unauthorized',
+                  'message': 'Sesi berakhir, silakan login lagi.',
+                },
+              }, 401)
+            : null,
+      ),
+    );
+    habis = true;
+    await t.pump(const Duration(seconds: 10));
+    await t.pumpAndSettle();
+    expect(find.text('Bacaan terakhir'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Masuk'), findsOneWidget);
+    expect(find.text('Sesi berakhir. Silakan masuk lagi.'), findsOneWidget);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('gagal memperbarui detail tetap menampilkan data terakhir', (
+    t,
+  ) async {
+    var putus = false;
+    await _bukaDetail(
+      t,
+      _api(
+        override: (req) => putus
+            ? json({
+                'error': {'code': 'unavailable', 'message': 'Server sibuk.'},
+              }, 503)
+            : null,
+      ),
+    );
+    putus = true;
+    await t.pump(const Duration(seconds: 10));
+    await t.pumpAndSettle();
+    expect(find.text('Bacaan terakhir'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Nyalakan aerator'), findsOneWidget);
+    expect(find.textContaining('Pembaruan gagal'), findsOneWidget);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('galat kontrol diumumkan pembaca layar', (t) async {
+    final semantics = t.ensureSemantics();
+    await _bukaDetail(
+      t,
+      _api(
+        override: (req) => req.url.path == '/api/devices/K1/control'
+            ? json({
+                'error': {'code': 'conflict', 'message': 'Aktuator sibuk.'},
+              }, 409)
+            : null,
+      ),
+    );
+    await t.tap(find.widgetWithText(FilledButton, 'Nyalakan aerator'));
+    await t.pumpAndSettle();
+    expect(
+      t.getSemantics(find.byKey(const Key('control-error'))),
+      isSemantics(isLiveRegion: true),
+    );
+    await t.pumpWidget(const SizedBox());
+    semantics.dispose();
+  });
+
+  testWidgets('pembaruan otomatis berhenti saat aplikasi di latar belakang', (
+    t,
+  ) async {
+    await _bukaDetail(t, _api());
+    requestPaths.clear();
+    t.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await t.pump(const Duration(seconds: 35));
+    expect(requestPaths, isEmpty);
+    t.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await t.pumpAndSettle();
+    expect(requestPaths, contains('/api/devices'));
+    await t.pumpWidget(const SizedBox());
+  });
+}
+
+Future<void> _bukaDetail(WidgetTester t, ApiClient api) async {
+  // Tall enough that the lazily built list holds the control section.
+  t.view.physicalSize = const Size(800, 3200);
+  t.view.devicePixelRatio = 1;
+  addTearDown(t.view.reset);
+  await t.pumpWidget(AquaSmartApp(api: api));
+  await _masuk(t);
+  await t.tap(find.text('Kolam Nila'));
+  await t.pumpAndSettle();
 }

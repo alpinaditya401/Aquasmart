@@ -44,17 +44,9 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _tab = 0;
   int _unread = 0;
+  Map<String, String> _pondNames = const {};
   final _ponds = GlobalKey<PondsScreenState>();
   final _alerts = GlobalKey<AlertsScreenState>();
-
-  @override
-  void initState() {
-    super.initState();
-    // Badge count before the alerts tab is ever opened.
-    widget.api.alerts(limit: 1).then((r) {
-      if (mounted) setState(() => _unread = r.$2);
-    }, onError: (_) {});
-  }
 
   Future<void> _logout() async {
     try {
@@ -67,6 +59,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _sessionLost() {
     if (!mounted) return;
+    // A pushed detail route would otherwise stay on top of the login screen.
+    Navigator.of(context).popUntil((r) => r.isFirst);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Sesi berakhir. Silakan masuk lagi.')),
     );
@@ -110,11 +104,17 @@ class _HomeScreenState extends State<HomeScreen> {
           PondsScreen(
             key: _ponds,
             api: widget.api,
+            onDevices: (list) => setState(
+              () => _pondNames = {for (final d in list) d.id: d.name},
+            ),
             onSessionLost: _sessionLost,
           ),
+          // IndexedStack builds this tab at once, so its first fetch also
+          // fills the badge.
           AlertsScreen(
             key: _alerts,
             api: widget.api,
+            pondNames: _pondNames,
             onCount: (n) => setState(() => _unread = n),
             onSessionLost: _sessionLost,
           ),

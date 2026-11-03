@@ -50,6 +50,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+    final meta = tt.labelSmall?.copyWith(color: Palette.muted);
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -66,21 +68,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       children: [
                         const LogoMark(),
                         const SizedBox(width: 10),
-                        const Text(
-                          'AquaSmart',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
+                        Text('AquaSmart', style: tt.headlineSmall),
                       ],
                     ),
                     const SizedBox(height: 28),
                     Text(
                       'Masuk',
-                      style: Theme.of(context).textTheme.headlineMedium
-                          ?.copyWith(fontWeight: FontWeight.w600),
+                      style: tt.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     const Text(
@@ -114,10 +110,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: 14),
-                      Text(
-                        _error!,
-                        key: const Key('login-error'),
-                        style: const TextStyle(color: Palette.alarmCoralText),
+                      // Focus stays on the button, so TalkBack only reads the
+                      // message if it is a live region.
+                      Semantics(
+                        container: true,
+                        liveRegion: true,
+                        child: Text(
+                          _error!,
+                          key: const Key('login-error'),
+                          style: const TextStyle(
+                            color: Palette.alarmCoralText,
+                          ),
+                        ),
                       ),
                     ],
                     const SizedBox(height: 20),
@@ -126,17 +130,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: Text(_busy ? 'Memeriksa...' : 'Masuk'),
                     ),
                     const SizedBox(height: 24),
-                    Text(
-                      'Server: ${widget.api.baseUrl}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Palette.muted,
-                      ),
-                    ),
+                    Text('Server: ${widget.api.baseUrl}', style: meta),
                     const SizedBox(height: 4),
-                    const Text(
+                    Text(
                       'Belum punya akun? Daftar lewat dashboard web AquaSmart.',
-                      style: TextStyle(fontSize: 12, color: Palette.muted),
+                      style: meta,
                     ),
                   ],
                 ),

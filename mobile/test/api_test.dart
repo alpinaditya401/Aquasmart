@@ -151,6 +151,153 @@ void main() {
     expect(alerts.single.id, 7);
     expect(unread, 4);
   });
+
+  test('redirect 308 berupa teks menjadi ApiException, bukan FormatException',
+      () async {
+    final api = ApiClient(
+      baseUrl: 'http://srv',
+      client: MockClient(
+        (_) async => http.Response(
+          'Redirecting...',
+          308,
+          headers: {'content-type': 'text/plain', 'location': 'https://srv/'},
+        ),
+      ),
+    );
+    await expectLater(
+      api.login('a', 'b'),
+      throwsA(
+        isA<ApiException>()
+            .having((e) => e.status, 'status', 308)
+            .having((e) => e.code, 'code', 'redirect')
+            .having((e) => e.message, 'message', contains('https://')),
+      ),
+    );
+  });
+
+  test('halaman galat HTML memberi pesan format tidak dikenali', () async {
+    final api = ApiClient(
+      baseUrl: 'http://srv',
+      client: MockClient(
+        (_) async => http.Response(
+          '<html><body>Not Found</body></html>',
+          404,
+          headers: {'content-type': 'text/html'},
+        ),
+      ),
+    );
+    await expectLater(
+      api.devices(),
+      throwsA(
+        isA<ApiException>()
+            .having((e) => e.status, 'status', 404)
+            .having((e) => e.code, 'code', 'bad_response')
+            .having((e) => e.message, 'message', contains('HTTP 404')),
+      ),
+    );
+  });
+
+  test('JSON yang bukan objek ditolak dengan ApiException', () async {
+    final api = ApiClient(
+      baseUrl: 'http://srv',
+      client: MockClient((_) async => json([1, 2], 200)),
+    );
+    await expectLater(
+      api.devices(),
+      throwsA(isA<ApiException>().having((e) => e.code, 'code', 'bad_response')),
+    );
+  });
+
+  test('build release menolak alamat http:// sebelum mengirim kata sandi', () async {
+    final seen = <http.Request>[];
+    final api = ApiClient(
+      baseUrl: 'http://192.168.1.10:8080',
+      allowHttp: false,
+      client: MockClient((req) async {
+        seen.add(req);
+        return json({'user': _user, 'csrf_token': 'abc'}, 200);
+      }),
+    );
+    await expectLater(
+      api.login('a', 'rahasia'),
+      throwsA(
+        isA<ApiException>()
+            .having((e) => e.code, 'code', 'insecure')
+            .having((e) => e.message, 'message', contains('https://')),
+      ),
+    );
+    expect(seen, isEmpty);
+  });
+
+  test('build release tetap terhubung ke alamat https://', () async {
+    final api = ApiClient(
+      baseUrl: 'https://srv',
+      allowHttp: false,
+      client: MockClient(
+        (_) async => json({'user': _user, 'csrf_token': 'abc'}, 200),
+      ),
+    );
+    expect((await api.login('a', 'b')).name, 'Budi');
+  });
+
+  test('401 dengan badan non-JSON tetap menghapus sesi lokal', () async {
+    var call = 0;
+    final api = ApiClient(
+      baseUrl: 'http://srv',
+      client: MockClient(
+        (_) async => ++call == 1
+            ? json(
+                {'user': _user, 'csrf_token': 'abc'},
+                200,
+                headers: {'set-cookie': 'aquasmart_session=s1; Path=/'},
+              )
+            : http.Response('Unauthorized', 401),
+      ),
+    );
+    await api.login('a', 'b');
+    await expectLater(
+      api.devices(),
+      throwsA(isA<ApiException>().having((e) => e.status, 'status', 401)),
+    );
+    expect(api.loggedIn, isFalse);
+  });
+
+  test('expires_at perintah dan provenance alert terbaca', () async {
+    final api = ApiClient(
+      baseUrl: 'http://srv',
+      client: MockClient(
+        (req) async => req.url.path == '/api/alerts'
+            ? json({
+                'alerts': [
+                  {
+                    'id': 1,
+                    'device_id': 'K1',
+                    'message': 'm',
+                    'source': 'SEED / data contoh',
+                    'provenance': 'seed',
+                    'acknowledged': false,
+                    'created_at': '2026-10-27T01:00:00Z',
+                  },
+                ],
+                'unacknowledged_count': 1,
+              }, 200)
+            : json({
+                'commands': [
+                  {
+                    'actuator': 'aerator',
+                    'value': true,
+                    'duration': 0,
+                    'status': 'pending',
+                    'created_at': 100,
+                    'expires_at': 400,
+                  },
+                ],
+              }, 200),
+      ),
+    );
+    expect((await api.commands('K1')).single.expiresAt, 400);
+    expect((await api.alerts()).$1.single.provenance, 'seed');
+  });
 }
 
 class SocketLikeException implements Exception {

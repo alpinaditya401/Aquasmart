@@ -36,10 +36,22 @@ ThemeData buildTheme() {
     scaffoldBackgroundColor: Palette.foam,
   );
   return base.copyWith(
-    textTheme: base.textTheme.apply(
-      bodyColor: Palette.ink,
-      displayColor: Palette.ink,
-    ),
+    // One scale for every screen, so a heading level has a single size.
+    textTheme: base.textTheme
+        .merge(
+          const TextTheme(
+            headlineSmall: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.5,
+            ),
+            titleMedium: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            titleSmall: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            bodySmall: TextStyle(fontSize: 13, height: 1.4),
+            labelSmall: TextStyle(fontSize: 12, letterSpacing: 0),
+          ),
+        )
+        .apply(bodyColor: Palette.ink, displayColor: Palette.ink),
     appBarTheme: const AppBarTheme(
       backgroundColor: Palette.foam,
       foregroundColor: Palette.ink,

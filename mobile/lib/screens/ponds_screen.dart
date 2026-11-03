@@ -10,10 +10,12 @@ class PondsScreen extends StatefulWidget {
   const PondsScreen({
     super.key,
     required this.api,
+    required this.onDevices,
     required this.onSessionLost,
   });
 
   final ApiClient api;
+  final ValueChanged<List<Device>> onDevices;
   final VoidCallback onSessionLost;
 
   @override
@@ -23,8 +25,11 @@ class PondsScreen extends StatefulWidget {
 class PondsScreenState extends State<PondsScreen> {
   late Future<(List<Device>, Thresholds)> _load = _fetch();
 
-  Future<(List<Device>, Thresholds)> _fetch() async =>
-      (await widget.api.devices(), await widget.api.thresholds());
+  Future<(List<Device>, Thresholds)> _fetch() async {
+    final devices = await widget.api.devices();
+    if (mounted) widget.onDevices(devices);
+    return (devices, await widget.api.thresholds());
+  }
 
   Future<void> refresh() async {
     final f = _fetch();
@@ -41,7 +46,7 @@ class PondsScreenState extends State<PondsScreen> {
       child: FutureBuilder(
         future: _load,
         builder: (context, snap) {
-          if (snap.connectionState != ConnectionState.done) {
+          if (snap.connectionState != ConnectionState.done && !snap.hasData) {
             return const LoadingView('Memuat data kolam...');
           }
           if (snap.hasError) {
@@ -82,10 +87,11 @@ class PondsScreenState extends State<PondsScreen> {
                       api: widget.api,
                       device: devices[i],
                       thresholds: t,
+                      onSessionLost: widget.onSessionLost,
                     ),
                   ),
                 );
-                refresh();
+                if (mounted) refresh();
               },
             ),
           );
@@ -120,6 +126,7 @@ class _PondCard extends StatelessWidget {
         ? 'Semua parameter aman'
         : '${keluar.map((p) => p.label).join(', ')} di luar batas';
 
+    final tt = Theme.of(context).textTheme;
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -131,19 +138,10 @@ class _PondCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Expanded(
-                    child: Text(
-                      device.name,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
+                  Expanded(child: Text(device.name, style: tt.titleMedium)),
                   Text(
-                    device.online ? 'Online' : 'Offline',
-                    style: TextStyle(
-                      fontSize: 13,
+                    labelKoneksi(device.online),
+                    style: tt.bodySmall?.copyWith(
                       fontWeight: FontWeight.w600,
                       color: device.online
                           ? Palette.clearWaterText
@@ -182,7 +180,7 @@ class _PondCard extends StatelessWidget {
                 const SizedBox(height: 10),
                 Text(
                   '${formatIso(r.time)} · ${labelSumber(r)}',
-                  style: const TextStyle(fontSize: 12, color: Palette.muted),
+                  style: tt.labelSmall?.copyWith(color: Palette.muted),
                 ),
               ],
             ],
@@ -203,18 +201,14 @@ class _Nilai extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final k = p.kondisi(r, t);
+    final tt = Theme.of(context).textTheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          p.label,
-          style: const TextStyle(fontSize: 12, color: Palette.muted),
-        ),
+        Text(p.label, style: tt.labelSmall?.copyWith(color: Palette.muted)),
         Text(
           '${formatAngka(p.of(r))}${p.unit.isEmpty ? '' : ' ${p.unit}'}',
-          style: dataStyle.copyWith(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
+          style: tt.titleMedium?.merge(dataStyle).copyWith(
             color: warnaKondisi(k),
           ),
         ),

@@ -45,16 +45,25 @@ class MessageView extends StatelessWidget {
     // A list so pull-to-refresh still works on an empty or failed screen.
     padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
     children: [
-      Text(
-        title,
-        style: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.w600,
-          color: isError ? Palette.alarmCoralText : Palette.ink,
+      // Errors replace the whole screen without moving focus, so they are
+      // announced as a live region.
+      Semantics(
+        container: true,
+        liveRegion: isError,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: isError ? Palette.alarmCoralText : Palette.ink,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(body, style: const TextStyle(color: Palette.ink, height: 1.4)),
+          ],
         ),
       ),
-      const SizedBox(height: 8),
-      Text(body, style: const TextStyle(color: Palette.ink, height: 1.4)),
       if (actionLabel != null) ...[
         const SizedBox(height: 16),
         Align(

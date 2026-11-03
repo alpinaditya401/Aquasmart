@@ -1,15 +1,18 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 /// Server address, set at build time:
-///   flutter build apk --dart-define=AQUASMART_API_URL=https://server.example
-/// The default reaches the host machine from the Android emulator, where the
-/// backend runs through docker compose on port 8080.
-const String defaultApiUrl = String.fromEnvironment(
-  'AQUASMART_API_URL',
-  defaultValue: 'http://10.0.2.2:8080',
-);
+///   flutter build apk --release --dart-define=API_BASE_URL=https://server.example
+/// Without it, release and profile builds use the public HTTPS server, because
+/// only the debug manifest allows cleartext HTTP. Debug builds reach the host
+/// machine from the Android emulator, where docker compose serves port 8080.
+const String defaultApiUrl = bool.hasEnvironment('API_BASE_URL')
+    ? String.fromEnvironment('API_BASE_URL')
+    : kDebugMode
+    ? 'http://10.0.2.2:8080'
+    : 'https://aquasmart.my.id';
 
 class ApiException implements Exception {
   ApiException(this.status, this.code, this.message);
@@ -126,6 +129,7 @@ class Alert {
     required this.deviceId,
     required this.message,
     required this.source,
+    required this.provenance,
     required this.acknowledged,
     required this.createdAt,
   });
@@ -135,6 +139,7 @@ class Alert {
     deviceId: j['device_id'] as String? ?? '',
     message: j['message'] as String? ?? '',
     source: j['source'] as String? ?? '',
+    provenance: j['provenance'] as String? ?? '',
     acknowledged: j['acknowledged'] as bool? ?? false,
     createdAt: j['created_at'] as String? ?? '',
   );
@@ -142,7 +147,11 @@ class Alert {
   final int id;
   final String deviceId;
   final String message;
+
+  /// Backend label such as "DEVICE / kalibrasi belum diverifikasi"; the app
+  /// shows its own wording from [provenance] instead.
   final String source;
+  final String provenance;
   final bool acknowledged;
   final String createdAt;
 }
@@ -154,6 +163,7 @@ class Command {
     required this.duration,
     required this.status,
     required this.createdAt,
+    required this.expiresAt,
   });
 
   factory Command.fromJson(Map<String, dynamic> j) => Command(
@@ -162,6 +172,7 @@ class Command {
     duration: j['duration'] as int? ?? 0,
     status: j['status'] as String? ?? '',
     createdAt: j['created_at'] as int? ?? 0,
+    expiresAt: j['expires_at'] as int?,
   );
 
   final String actuator;
@@ -171,17 +182,24 @@ class Command {
 
   /// Epoch seconds, as stored by the backend for commands.
   final int createdAt;
+  final int? expiresAt;
 }
 
 /// Talks to the AquaSmart Flask backend with the same session cookie and
 /// CSRF header the web dashboard uses.
 class ApiClient {
-  ApiClient({String? baseUrl, http.Client? client})
+  ApiClient({String? baseUrl, http.Client? client, this.allowHttp = kDebugMode})
     : baseUrl = (baseUrl ?? defaultApiUrl).replaceAll(RegExp(r'/+$'), ''),
       _http = client ?? http.Client();
 
   final String baseUrl;
   final http.Client _http;
+
+  /// dart:io opens its own sockets, and it is not confirmed that this Flutter
+  /// version applies the release manifest's cleartext setting to them. The
+  /// scheme is checked here so the password and session cookie never leave a
+  /// release build unencrypted.
+  final bool allowHttp;
   String? _cookie;
   String? _csrf;
   User? user;
@@ -210,6 +228,14 @@ class ApiClient {
     Object? body,
     bool mutate = false,
   }) async {
+    if (!allowHttp && !baseUrl.startsWith('https://')) {
+      throw ApiException(
+        0,
+        'insecure',
+        'Alamat server $baseUrl tidak memakai https://. Aplikasi ini hanya '
+            'terhubung lewat HTTPS agar kata sandi tidak terkirim tanpa enkripsi.',
+      );
+    }
     final req = http.Request(method, Uri.parse('$baseUrl$path'))
       ..headers.addAll(_headers(mutate: mutate));
     if (body != null) req.body = jsonEncode(body);
@@ -226,15 +252,37 @@ class ApiClient {
       );
     }
     _keepCookie(r);
-    final Map<String, dynamic> data = r.body.isEmpty
-        ? <String, dynamic>{}
-        : (jsonDecode(r.body) as Map<String, dynamic>? ?? {});
+    if (r.statusCode == 401) {
+      _cookie = null;
+      _csrf = null;
+    }
+    // dart:io does not follow redirects for POST, so an http:// address that
+    // the server upgrades to https:// lands here instead of at the API.
+    if (r.statusCode >= 300 && r.statusCode < 400) {
+      throw ApiException(
+        r.statusCode,
+        'redirect',
+        'Server mengalihkan permintaan (HTTP ${r.statusCode}). Periksa alamat '
+            'server $baseUrl, biasanya harus diawali https://.',
+      );
+    }
+    Object? decoded;
+    try {
+      decoded = r.body.isEmpty ? <String, dynamic>{} : jsonDecode(r.body);
+    } on FormatException {
+      decoded = null;
+    }
+    if (decoded is! Map<String, dynamic>) {
+      throw ApiException(
+        r.statusCode,
+        'bad_response',
+        'Server membalas dengan format yang tidak dikenali (HTTP ${r.statusCode}). '
+            'Periksa alamat server $baseUrl.',
+      );
+    }
+    final data = decoded;
     if (r.statusCode >= 400) {
       final err = data['error'] as Map<String, dynamic>? ?? {};
-      if (r.statusCode == 401) {
-        _cookie = null;
-        _csrf = null;
-      }
       throw ApiException(
         r.statusCode,
         err['code'] as String? ?? 'error',
